@@ -255,13 +255,23 @@ function processEvents(rawEvents) {
         'baseball',
         'golf',
         'dart',
-        'koszykowka'
+        'koszykowka',
+        'boks',
+        'mma',
+        'futsal',
+        'kolarstwo'
     ];
 
     const lowerTierKeywords = [
         '2. liga', '3. liga', 'u23', 'u19', 'challenger',
         'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2',
         'serie b', 'revelação', 'dmpj', 'cro race', 'itf'
+    ];
+
+    const polishTennisKeywords = [
+        'świątek', 'swiatek', 'hurkacz', 'linette', 'fręch', 'frech',
+        'zieliński', 'zielinski', 'majchrzak', 'kawa', 'chwalińska', 'chwalinska',
+        'polska', 'poland'
     ];
 
     for (const ev of rawEvents) {
@@ -272,7 +282,7 @@ function processEvents(rawEvents) {
 
         // 1. Eliminacja niechcianych dyscyplin
         if (excludedCategories.includes(cat)) continue;
-        if (titleLower.includes('wnba') || titleLower.includes('nfl') || titleLower.includes('mlb')) continue;
+        if (titleLower.includes('wnba') || titleLower.includes('nfl') || titleLower.includes('mlb') || titleLower.includes('ufc')) continue;
 
         // 2. Piłka ręczna: WYŁĄCZNIE Reprezentacja Polski
         if (cat === 'pilkareczna') {
@@ -280,14 +290,25 @@ function processEvents(rawEvents) {
             if (!isPoland) continue;
         }
 
-        // 3. Eliminacja niższych poziomów rozgrywkowych
+        // 3. Tenis: WYŁĄCZNIE Polacy i tylko od półfinałów do finałów
+        if (cat === 'tenis') {
+            const hasPolishPlayer = polishTennisKeywords.some(kw => titleLower.includes(kw));
+            if (!hasPolishPlayer) continue;
+
+            // Sprawdź czy to półfinał lub finał
+            const isSemiOrFinal = titleLower.includes('finał') || 
+                                  titleLower.includes('final') || 
+                                  titleLower.includes('półfinał') || 
+                                  titleLower.includes('polfinal') || 
+                                  titleLower.includes('semi');
+            // Jeśli podano informację o wcześniejszych rundach, odrzuć
+            const isEarlyRound = titleLower.includes('1/4') || titleLower.includes('ćwierć') || titleLower.includes('qf') || titleLower.includes('runda');
+            if (isEarlyRound && !isSemiOrFinal) continue;
+        }
+
+        // 4. Eliminacja niższych poziomów rozgrywkowych
         const isLowerTier = lowerTierKeywords.some(kw => titleLower.includes(kw));
         if (isLowerTier) continue;
-
-        // 4. Tenis: eliminacja challengerów
-        if (cat === 'tenis' && (titleLower.includes('challenger') || titleLower.includes('itf'))) {
-            continue;
-        }
 
         // Przypisanie do dnia
         const evDate = new Date(ev.startTime * 1000);

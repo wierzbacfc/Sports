@@ -34,7 +34,7 @@ async function callGemini(apiKey, systemInstruction, userContent) {
 
 /**
  * Agent 1: Ekspert Sportowy & Selekcjoner
- * Filtruje surowe dane, odrzuca niższe ligi i niechciane sporty, grupuje według dni i lig.
+ * Filtruje surowe dane, odrzuca niższe ligi i niechciane dyscypliny, grupuje według dni i lig.
  */
 async function runAgent1Curator(apiKey, rawScheduleJson) {
     console.log('[AI Agent 1: Ekspert Sportowy] Selekcja i filtrowanie surowych wydarzeń...');
@@ -43,17 +43,20 @@ Otrzymujesz surowy zbiór wydarzeń pobranych ze Strumyka podzielony na DZIŚ, J
 
 TWOJE JEDYNE ZADANIE:
 1. Przefiltruj wydarzenia, pozostawiając WYŁĄCZNIE najwyższy poziom rozgrywkowy (TOP TIER / Elita / Mecze hitowe):
-   - Piłka nożna: tylko najwyższe ligi (np. Ekstraklasa, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Eredivisie, itp.), europejskie puchary, mecze reprezentacji. BEZWZGLĘDNIE USUŃ: 2. ligi, 3. ligi, rozgrywki U23/U19, sparingi.
+   - Piłka nożna: tylko najwyższe ligi (np. Ekstraklasa, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Eredivisie itp.), europejskie puchary, mecze reprezentacji. BEZWZGLĘDNIE USUŃ: 2. ligi, 3. ligi, rozgrywki U23/U19, sparingi.
    - Żużel: tylko PGE Ekstraliga (finały, mecze o medale, runda zasadnicza) oraz Speedway Grand Prix. USUŃ 2. ligi i DMPJ.
    - Motosport: tylko Formuła 1 i MotoGP.
-   - Kolarstwo: tylko Mistrzostwa Świata (Elita) i Wielkie Toury.
-   - Tenis: turnieje główne ATP i WTA, mecze Pucharu Davisa, Wielki Szlem. USUŃ turnieje rangi Challenger i ITF.
-   - Sporty walki: gale UFC oraz prestiżowe walki bokserskie.
    - Siatkówka: mecze reprezentacji narodowych.
-   - Piłka ręczna: WYŁĄCZNIE mecze reprezentacji Polski. Całkowicie wykasuj klubową piłkę ręczną!
    - Magazyny sportowe: główne podsumowania (np. Liga+Extra, Magazyn PGE Ekstraliga, Sportowy Wieczór).
+   
+   ŚCISŁE REGUŁY DLA WYBRANYCH DYSCYPLIN:
+   - TENIS: Zostaw mecze tenisowe WYŁĄCZNIE wtedy, gdy grają Polacy (np. Iga Świątek, Hubert Hurkacz, Magda Linette, Magdalena Fręch, Jan Zieliński, Polska w Pucharze Davisa / BJK Cup itp.) ORAZ TYLKO gdy jest to faza PÓŁFINAŁÓW LUB FINAŁÓW. Wszystkie mecze bez Polaków oraz wszystkie wcześniejsze rundy (1/32, 1/16, ćwierćfinały) BEZWZGLĘDNIE ODRZUĆ!
+   - PIŁKA RĘCZNA: WYŁĄCZNIE mecze reprezentacji Polski. Całkowicie wykasuj klubową piłkę ręczną!
 
-2. BEZWZGLĘDNIE WYELIMINUJ:
+2. CAŁKOWICIE I BEZWZGLĘDNIE WYELIMINUJ:
+   - Sporty walki (UFC, MMA, boks - USUNIĘTE!)
+   - Futsal (USUNIĘTY!)
+   - Kolarstwo (USUNIĘTE!)
    - Sporty amerykańskie: Futbol amerykański (NFL), Baseball (MLB), WNBA.
    - Dart.
    - Golf.
@@ -76,10 +79,18 @@ async function runAgent2Verifier(apiKey, agent1Draft) {
     const systemPrompt = `Działasz jako bezwzględny audytor i kontroler jakości raportu sportowego przeznaczonego do wysyłki na WhatsApp.
 Twoim celem jest sprawdzenie zestawienia przygotowanego przez Agenta 1 i upewnienie się, że spełnia w 100% poniższe reguły:
 
-1. KONTROLA NIŻSZYCH LIG: Czy nie prześlizgnęła się żadna 2. liga, 3. liga, zaplecze, rozgrywki U23, Challenger lub ITF? Jeśli tak, natychmiast ją wykreśl.
-2. KONTROLA PIŁKI RĘCZNEJ: Piłka ręczna może dotyczyć WYŁĄCZNIE meczów reprezentacji Polski. Jeśli widzisz mecze klubowe – usuń je.
-3. KONTROLA SPORTÓW WYKLUCZONYCH: Brak sportów amerykańskich (NFL, MLB, WNBA), darta, golfa, koszykówki.
-4. FORMATOWANIE WHATSAPP:
+1. KONTROLA WYKLUCZONYCH DYSCYPLIN:
+   - Czy na pewno NIE MA sportów walki (UFC, MMA, boks)? Jeśli są – usuń.
+   - Czy na pewno NIE MA futsalu? Jeśli jest – usuń.
+   - Czy na pewno NIE MA kolarstwa? Jeśli jest – usuń.
+   - Brak sportów amerykańskich (NFL, MLB, WNBA), darta, golfa, koszykówki.
+2. KONTROLA TENISA:
+   - Tenis może zawierać WYŁĄCZNIE mecze Polaków (Świątek, Hurkacz, Linette, Fręch, Zieliński, rep. Polski) i TYLKO od fazy półfinałów do finałów. Jeśli widzisz mecz bez Polaków lub wcześniejszą rundę – natychmiast usuń.
+3. KONTROLA PIŁKI RĘCZNEJ:
+   - Piłka ręczna może dotyczyć WYŁĄCZNIE meczów reprezentacji Polski. Jeśli widzisz mecze klubowe – usuń je.
+4. KONTROLA NIŻSZYCH LIG:
+   - Czy nie prześlizgnęła się żadna 2. liga, 3. liga, zaplecze, rozgrywki U23, Challenger lub ITF? Jeśli tak, natychmiast ją wykreśl.
+5. FORMATOWANIE WHATSAPP:
    - Zastosuj formatowanie WhatsApp: *pogrubienie* godzin i nagłówków lig.
    - Zachowaj czytelną strukturę:
      🏆 *SPORTOWY ROZKŁAD JAZDY*
@@ -94,7 +105,7 @@ Twoim celem jest sprawdzenie zestawienia przygotowanego przez Agenta 1 i upewnie
      (mecze na pojutrze)
    - Używaj odpowiednich emoji dla dyscyplin.
 
-5. Zwróć WYŁĄCZNIE ostateczną, zweryfikowaną treść wiadomości gotową do wysłania. Nie dodawaj żadnych własnych uwag ("Oto zweryfikowany raport"), żadnych wstępów ani komentarzy.`;
+6. Zwróć WYŁĄCZNIE ostateczną, zweryfikowaną treść wiadomości gotową do wysłania. Nie dodawaj żadnych własnych uwag ("Oto zweryfikowany raport"), żadnych wstępów ani komentarzy.`;
 
     const userPrompt = `Oto draft sporządzony przez Agenta 1 do zweryfikowania i finalnego sformatowania:\n\n${agent1Draft}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
