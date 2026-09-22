@@ -252,16 +252,30 @@ function processEvents(rawEvents) {
 
     const excludedCategories = [
         'americanfootball',
+        'football', // amerykański futbol w niektórych serwisach
+        'nfl',
         'baseball',
+        'mlb',
         'golf',
         'dart',
+        'darts',
         'koszykowka',
+        'basketball',
+        'nba',
+        'wnba',
         'boks',
+        'boxing',
         'mma',
+        'ufc',
+        'ksw',
         'futsal',
         'kolarstwo',
+        'cycling',
         'krykiet',
+        'cricket',
         'hokej',
+        'hockey',
+        'icehockey',
         'snooker',
         'badminton',
         'curling',
@@ -270,16 +284,14 @@ function processEvents(rawEvents) {
     ];
 
     const lowerTierKeywords = [
-        '2. liga', '3. liga', '4. liga', 'u23', 'u21', 'u20', 'u19', 'u18', 'u17', 'challenger',
-        'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2',
-        'serie b', 'revelação', 'dmpj', 'cro race', 'itf',
-        'celtic b', 'rezerwy', 'ii liga'
-    ];
-
-    const polishTennisKeywords = [
-        'świątek', 'swiatek', 'hurkacz', 'linette', 'fręch', 'frech',
-        'zieliński', 'zielinski', 'majchrzak', 'kawa', 'chwalińska', 'chwalinska',
-        'polska', 'poland'
+        '2. liga', '3. liga', '4. liga', 'ii liga', 'iii liga', 'iv liga',
+        'liga 2', 'liga ii', 'liga 3', 'liga iii',
+        'u23', 'u21', 'u20', 'u19', 'u18', 'u17', 'u16', 'youth', 'młodzież',
+        'challenger', 'itf',
+        'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2', 'serie b',
+        'revelação', 'dmpj', 'cro race',
+        'celtic b', 'hearts b', 'rezerwy', 'ii ', ' 2', ' b ',
+        'dumbravita', 'resita', 'mures', 'bucuresti', 'kladno', 'banik', 'birmingham – brooklyn'
     ];
 
     for (const ev of rawEvents) {
@@ -288,35 +300,22 @@ function processEvents(rawEvents) {
         const cat = (ev.category || '').toLowerCase();
         const titleLower = ev.title.toLowerCase();
 
-        // 1. Eliminacja niechcianych dyscyplin
+        // 1. Eliminacja niechcianych dyscyplin po kategorii i słowach
         if (excludedCategories.includes(cat)) continue;
-        if (titleLower.includes('wnba') || titleLower.includes('nfl') || titleLower.includes('mlb') || titleLower.includes('ufc')) continue;
-
-        // 2. Piłka ręczna: WYŁĄCZNIE Reprezentacja Polski
-        if (cat === 'pilkareczna') {
-            const isPoland = titleLower.includes('polska') || titleLower.includes('poland');
-            if (!isPoland) continue;
+        if (titleLower.includes('wnba') || titleLower.includes('nba') || titleLower.includes('nfl') || 
+            titleLower.includes('mlb') || titleLower.includes('ufc') || titleLower.includes('ksw') ||
+            titleLower.includes('futsal') || titleLower.includes('kolarstwo') || titleLower.includes('cycling') ||
+            titleLower.includes('krykiet') || titleLower.includes('cricket') || titleLower.includes('hokej') ||
+            titleLower.includes('snooker') || titleLower.includes('dart') || titleLower.includes('golf')) {
+            continue;
         }
 
-        // 3. Tenis: WYŁĄCZNIE Polacy i tylko od półfinałów do finałów
-        if (cat === 'tenis') {
-            const hasPolishPlayer = polishTennisKeywords.some(kw => titleLower.includes(kw));
-            if (!hasPolishPlayer) continue;
+        // 2. Eliminacja rezerw i lig młodzieżowych/niższych
+        if (lowerTierKeywords.some(kw => titleLower.includes(kw))) continue;
 
-            // Sprawdź czy to półfinał lub finał
-            const isSemiOrFinal = titleLower.includes('finał') || 
-                                  titleLower.includes('final') || 
-                                  titleLower.includes('półfinał') || 
-                                  titleLower.includes('polfinal') || 
-                                  titleLower.includes('semi');
-            // Jeśli podano informację o wcześniejszych rundach, odrzuć
-            const isEarlyRound = titleLower.includes('1/4') || titleLower.includes('ćwierć') || titleLower.includes('qf') || titleLower.includes('runda');
-            if (isEarlyRound && !isSemiOrFinal) continue;
-        }
-
-        // 4. Eliminacja niższych poziomów rozgrywkowych
-        const isLowerTier = lowerTierKeywords.some(kw => titleLower.includes(kw));
-        if (isLowerTier) continue;
+        // 3. Kategoryzacja wydarzenia do sportu / ligi (tylko TOP TIER)
+        const displayCategory = categorizeEvent(ev.title, ev.category);
+        if (!displayCategory) continue; // jeśli nie pasuje do żadnej elitarnej ligi/kategorii, odrzucamy!
 
         // Przypisanie do dnia
         const evDate = new Date(ev.startTime * 1000);
@@ -338,6 +337,7 @@ function processEvents(rawEvents) {
                     time: timeStr,
                     startTime: ev.startTime,
                     category: ev.category,
+                    displayCategory: displayCategory,
                     title: ev.title
                 });
             }
@@ -351,10 +351,182 @@ function processEvents(rawEvents) {
     return schedule;
 }
 
+/**
+ * Precyzyjna kategoryzacja wydarzenia na elegancki nagłówek z emoji (TOP TIER).
+ * Zwraca null, jeśli wydarzenie nie kwalifikuje się do elity.
+ */
+function categorizeEvent(title, rawCategory) {
+    const t = title.toLowerCase();
+    const c = (rawCategory || '').toLowerCase();
+
+    // 1. Magazyny sportowe
+    if (t.includes('sportowy wieczór') || t.includes('liga+extra') || t.includes('liga plus extra') ||
+        t.includes('magazyn pge ekstraliga') || t.includes('premier league review') ||
+        t.includes('ligomistrzowe historie') || t.includes('magazyn ligi mistrzów') ||
+        t.includes('turbokozak') || t.includes('liga narodów - zapowiedź') || t.includes('magazyn')) {
+        return '📺 *Magazyny Sportowe:*';
+    }
+
+    // 2. Motorsport (Formuła 1 / MotoGP)
+    if (c === 'motorsport' || c === 'f1' || c === 'formula1' || c === 'motogp' ||
+        t.includes('formuła 1') || t.includes('formula 1') || t.includes('f1') ||
+        t.includes('grand prix') || t.includes('motogp')) {
+        return '🏎️ *Formuła 1 / MotoGP:*';
+    }
+
+    // 3. Żużel (PGE Ekstraliga / Speedway GP)
+    if (c === 'zuzel' || c === 'speedway' || t.includes('ekstraliga') || t.includes('speedway gp') || t.includes('sgp')) {
+        if (t.includes('metalkas') || t.includes('2. ekstraliga') || t.includes('dmpj')) return null;
+        return '🏁 *PGE Ekstraliga / Żużel:*';
+    }
+
+    // 4. Tenis - WYŁĄCZNIE Polacy i tylko faza 1/2 lub finał
+    if (c === 'tenis' || c === 'tennis') {
+        const polish = ['świątek', 'swiatek', 'hurkacz', 'linette', 'fręch', 'frech', 'zieliński', 'zielinski', 'majchrzak', 'kawa', 'chwalińska', 'chwalinska', 'polska', 'poland'];
+        const isPol = polish.some(k => t.includes(k));
+        if (!isPol) return null;
+        const isFinalOrSemi = t.includes('finał') || t.includes('final') || t.includes('półfinał') || t.includes('polfinal') || t.includes('semi');
+        if (!isFinalOrSemi) return null;
+        return '🎾 *Tenis (Występy Polaków - Finały):*';
+    }
+
+    // 5. Piłka ręczna - WYŁĄCZNIE Reprezentacja Polski
+    if (c === 'pilkareczna' || c === 'handball') {
+        if (t.includes('polska') || t.includes('poland')) {
+            return '🤾 *Piłka Ręczna (Reprezentacja Polski):*';
+        }
+        return null;
+    }
+
+    // 6. Siatkówka - WYŁĄCZNIE mecze międzynarodowe / reprezentacje
+    if (c === 'siatkowka' || c === 'volleyball') {
+        if (t.includes('u20') || t.includes('u19') || t.includes('u21') || t.includes('u23')) return null;
+        return '🏐 *Siatkówka (Mecze Międzynarodowe):*';
+    }
+
+    // 7. Piłka nożna - Ligi i Puchary
+    // Liga Mistrzyń UEFA
+    if (t.includes('liga mistrzyń') || t.includes('uwcl') || 
+        ((t.includes(' k –') || t.includes(' k -') || t.includes('(k)')) && 
+         (t.includes('bayern') || t.includes('manchester city') || t.includes('arsenal') || t.includes('real madrid') || t.includes('psg') || t.includes('servette') || t.includes('lyon') || t.includes('barcelona') || t.includes('chelsea') || t.includes('wolfsburg') || t.includes('juventus') || t.includes('koge')))) {
+        return '⚽ *Liga Mistrzyń UEFA:*';
+    }
+
+    // Liga Mistrzów UEFA
+    if (t.includes('liga mistrzów') || t.includes('champions league') || t.includes('ucl')) {
+        return '⚽ *Liga Mistrzów UEFA:*';
+    }
+
+    // Liga Europy / Liga Konferencji
+    if (t.includes('liga europy') || t.includes('europa league') || t.includes('liga konferencji') || t.includes('conference league')) {
+        return '⚽ *Europejskie Puchary (LE / LK):*';
+    }
+
+    // PKO BP Ekstraklasa
+    const ekstraklasaTeams = ['legia', 'lech', 'raków', 'rakow', 'jagiellonia', 'pogoń', 'pogon', 'górnik', 'cracovia', 'widzew', 'radomiak', 'piast', 'zagłębie', 'korona', 'stal mielec', 'śląsk', 'lechia', 'motor lublin', 'gks katowice', 'puszcza'];
+    if (t.includes('ekstraklasa') || ekstraklasaTeams.some(team => t.includes(team))) {
+        return '⚽ *PKO BP Ekstraklasa:*';
+    }
+
+    // Premier League
+    const premierTeams = ['arsenal', 'chelsea', 'liverpool', 'manchester city', 'man city', 'manchester united', 'man united', 'tottenham', 'aston villa', 'newcastle', 'brighton', 'west ham', 'fulham', 'brentford', 'crystal palace', 'bournemouth', 'everton', 'nottingham', 'wolves', 'ipswich', 'leicester', 'southampton'];
+    if (t.includes('premier league') || premierTeams.some(team => t.includes(team))) {
+        return '⚽ *Premier League:*';
+    }
+
+    // La Liga
+    const laLigaTeams = ['real madryt', 'real madrid', 'barcelona', 'atletico', 'athletic bilbao', 'real sociedad', 'villarreal', 'betis', 'sevilla', 'valencia', 'girona', 'celta vigo', 'espanyol', 'osasuna', 'mallorca'];
+    if (t.includes('la liga') || t.includes('laliga') || laLigaTeams.some(team => t.includes(team))) {
+        return '⚽ *La Liga:*';
+    }
+
+    // Serie A
+    const serieATeams = ['inter', 'juventus', 'milan', 'napoli', 'roma', 'lazio', 'atalanta', 'fiorentina', 'bologna', 'torino', 'udinese', 'parma'];
+    if (t.includes('serie a') || serieATeams.some(team => t.includes(team))) {
+        return '⚽ *Serie A:*';
+    }
+
+    // Bundesliga
+    const bundesligaTeams = ['bayern', 'dortmund', 'leverkusen', 'leipzig', 'stuttgart', 'eintracht frankfurt', 'wolfsburg', 'freiburg'];
+    if (t.includes('bundesliga') || bundesligaTeams.some(team => t.includes(team))) {
+        return '⚽ *Bundesliga:*';
+    }
+
+    // Ligue 1
+    const ligue1Teams = ['psg', 'marseille', 'monaco', 'lyon', 'lille', 'lens', 'nice', 'rennes'];
+    if (t.includes('ligue 1') || ligue1Teams.some(team => t.includes(team))) {
+        return '⚽ *Ligue 1:*';
+    }
+
+    // Mecze Reprezentacji Narodowych (Eliminacje MŚ / Liga Narodów)
+    if (t.includes('liga narodów') || t.includes('nations league') || t.includes('eliminacje') ||
+        t.includes('irak – oman') || t.includes('arabia saudyjska – kuwejt') ||
+        (t.includes('polska') && (t.includes('niemcy') || t.includes('francja') || t.includes('anglia') || t.includes('portugalia') || t.includes('chorwacja') || t.includes('szkocja')))) {
+        return '⚽ *Mecze Reprezentacji / Liga Narodów:*';
+    }
+
+    // Pozostałe topowe kluby europejskie
+    if ((t.includes('benfica') || t.includes('sporting') || t.includes('porto') || t.includes('ajax') || t.includes('psv') || t.includes('feyenoord') || (t.includes('celtic') && !t.includes('celtic b')) || t.includes('rangers')) && !t.includes(' 2') && !t.includes(' u2')) {
+        return '⚽ *Europejskie Hity Ligowe:*';
+    }
+
+    return null;
+}
+
+/**
+ * Buduje elegancki, posegregowany raport pod WhatsApp z podziałem na dni i ligi.
+ */
+function buildElegantReport(schedule) {
+    let report = `🏆 *SPORTOWY ROZKŁAD JAZDY*\n\n`;
+
+    const days = [
+        { key: 'dzisiaj', label: 'DZIŚ' },
+        { key: 'jutro', label: 'JUTRO' },
+        { key: 'pojutrze', label: 'POJUTRZE' }
+    ];
+
+    let totalEvents = 0;
+
+    for (const { key, label } of days) {
+        const events = schedule[key] || [];
+        if (events.length === 0) continue;
+
+        // Grupujemy wydarzenia według kategorii
+        const grouped = {};
+        for (const ev of events) {
+            const catHeader = ev.displayCategory || categorizeEvent(ev.title, ev.category);
+            if (!catHeader) continue;
+
+            if (!grouped[catHeader]) {
+                grouped[catHeader] = [];
+            }
+            grouped[catHeader].push(ev);
+        }
+
+        const groupKeys = Object.keys(grouped);
+        if (groupKeys.length === 0) continue;
+
+        report += `*─── ${label} ───*\n\n`;
+
+        for (const groupName of groupKeys) {
+            report += `${groupName}\n`;
+            for (const ev of grouped[groupName]) {
+                report += `• *${ev.time}* ${ev.title}\n`;
+                totalEvents++;
+            }
+            report += `\n`;
+        }
+    }
+
+    return totalEvents > 0 ? report.trim() : null;
+}
+
 module.exports = {
     loadConfig,
     saveConfig,
     getCandidateDomains,
     fetchStrumykData,
-    processEvents
+    processEvents,
+    categorizeEvent,
+    buildElegantReport
 };

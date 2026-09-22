@@ -1,4 +1,4 @@
-const { loadConfig, saveConfig, discoverWorkingDomain, fetchStrumykData, processEvents } = require('./engine');
+const { loadConfig, saveConfig, discoverWorkingDomain, fetchStrumykData, processEvents, buildElegantReport } = require('./engine');
 const { runAgent1Curator, runAgent2Verifier } = require('./ai_agents');
 const fs = require('fs');
 
@@ -94,25 +94,14 @@ async function run() {
         console.error('⚠️ OSTRZEŻENIE: Brak GEMINI_API_KEY w GitHub Secrets! Upewnij się, że dodałeś secret o nazwie GEMINI_API_KEY w ustawieniach repozytorium.');
     }
 
-    // Jeśli brak AI lub wystąpił błąd, używamy wbudowanego formatowania awaryjnego
+    // Jeśli brak AI lub wystąpił błąd, używamy wbudowanego eleganckiego formatowania z ikonami i kategoriami lig
     if (!finalReportText) {
-        finalReportText = `🏆 *SPORTOWY ROZKŁAD JAZDY*\n\n`;
-        finalReportText += `*─── DZIŚ ───*\n`;
-        for (const ev of preliminarySchedule.dzisiaj) {
-            finalReportText += `• *${ev.time}* ${ev.title}\n`;
-        }
-        if (preliminarySchedule.jutro.length > 0) {
-            finalReportText += `\n*─── JUTRO ───*\n`;
-            for (const ev of preliminarySchedule.jutro) {
-                finalReportText += `• *${ev.time}* ${ev.title}\n`;
-            }
-        }
-        if (preliminarySchedule.pojutrze.length > 0) {
-            finalReportText += `\n*─── POJUTRZE ───*\n`;
-            for (const ev of preliminarySchedule.pojutrze) {
-                finalReportText += `• *${ev.time}* ${ev.title}\n`;
-            }
-        }
+        console.log('Generowanie raportu z użyciem wbudowanego inteligentnego formatera (Emoji + podział na dyscypliny/ligi)...');
+        finalReportText = buildElegantReport(preliminarySchedule);
+    }
+
+    if (!finalReportText) {
+        finalReportText = `🏆 *SPORTOWY ROZKŁAD JAZDY*\n\nBrak wydarzeń spełniających elitarne kryteria na najbliższe 3 dni.`;
     }
 
     // 5. Podział na wiadomości (max 900 znaków, aby CallMeBot nigdy nic nie obciął)

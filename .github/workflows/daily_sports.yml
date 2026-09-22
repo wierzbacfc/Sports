@@ -22,6 +22,14 @@ jobs:
       - name: Verify Google Chrome
         run: google-chrome --version
 
+      - name: Check Secrets Configuration
+        run: |
+          if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "✅ GEMINI_API_KEY jest skonfigurowany w GitHub Secrets."
+          else
+            echo "⚠️ OSTRZEŻENIE: GEMINI_API_KEY NIE został znaleziony w GitHub Secrets! Uruchomiony zostanie wbudowany inteligentny formater."
+          fi
+
       - name: Run Daily Sports Report & Send WhatsApp
         env:
           CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
