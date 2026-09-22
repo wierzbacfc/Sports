@@ -333,9 +333,25 @@ function processEvents(rawEvents) {
         if (targetBucket) {
             const timeStr = evDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
             if (!targetBucket.some(e => e.title === ev.title && e.time === timeStr)) {
+                let sportName = 'Piłka nożna';
+                if (cat === 'siatkowka' || titleLower.includes('siatkówka') || titleLower.includes('siatkowka')) {
+                    sportName = 'Siatkówka';
+                } else if (cat === 'tenis') {
+                    sportName = 'Tenis';
+                } else if (cat === 'motorsport' || cat === 'f1' || titleLower.includes('formula 1') || titleLower.includes('f1')) {
+                    sportName = 'Formuła 1';
+                } else if (cat === 'zuzel' || titleLower.includes('ekstraliga')) {
+                    sportName = 'Żużel';
+                } else if (cat === 'magazyn') {
+                    sportName = 'Magazyn Sportowy';
+                } else if (cat === 'pilkareczna') {
+                    sportName = 'Piłka ręczna';
+                }
+
                 targetBucket.push({
                     time: timeStr,
                     startTime: ev.startTime,
+                    sport: sportName,
                     category: ev.category,
                     displayCategory: displayCategory,
                     title: ev.title
@@ -399,9 +415,9 @@ function categorizeEvent(title, rawCategory) {
     }
 
     // 6. Siatkówka - WYŁĄCZNIE mecze międzynarodowe / reprezentacje
-    if (c === 'siatkowka' || c === 'volleyball') {
+    if (c === 'siatkowka' || c === 'volleyball' || t.includes('siatkówka') || t.includes('siatkowka')) {
         if (t.includes('u20') || t.includes('u19') || t.includes('u21') || t.includes('u23')) return null;
-        return '🏐 *Siatkówka (Mecze Międzynarodowe):*';
+        return '🏐 *Siatkówka (Mecze Reprezentacji):*';
     }
 
     // 7. Piłka nożna - Ligi i Puchary
@@ -458,10 +474,11 @@ function categorizeEvent(title, rawCategory) {
         return '⚽ *Ligue 1:*';
     }
 
-    // Mecze Reprezentacji Narodowych (Eliminacje MŚ / Liga Narodów)
-    if (t.includes('liga narodów') || t.includes('nations league') || t.includes('eliminacje') ||
+    // Mecze Reprezentacji Narodowych w PIŁCE NOŻNEJ (Eliminacje MŚ / Liga Narodów)
+    if (c !== 'siatkowka' && !t.includes('siatkówka') && !t.includes('siatkowka') &&
+        (t.includes('liga narodów') || t.includes('nations league') || t.includes('eliminacje') ||
         t.includes('irak – oman') || t.includes('arabia saudyjska – kuwejt') ||
-        (t.includes('polska') && (t.includes('niemcy') || t.includes('francja') || t.includes('anglia') || t.includes('portugalia') || t.includes('chorwacja') || t.includes('szkocja')))) {
+        (t.includes('polska') && (t.includes('niemcy') || t.includes('francja') || t.includes('anglia') || t.includes('portugalia') || t.includes('chorwacja') || t.includes('szkocja'))))) {
         return '⚽ *Mecze Reprezentacji / Liga Narodów:*';
     }
 

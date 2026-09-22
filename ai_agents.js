@@ -2,8 +2,8 @@
 
 const MODELS = [
     'gemini-3.8-flash',
-    'gemini-2.5-pro',
-    'gemini-2.5-flash'
+    'gemini-2.5-flash',
+    'gemini-2.0-flash'
 ];
 
 async function callGemini(apiKey, systemInstruction, userContent) {
@@ -27,11 +27,22 @@ async function callGemini(apiKey, systemInstruction, userContent) {
                 }
             };
 
-            const res = await fetch(url, {
+            let res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+
+            // Jeśli 503 (chwilowe przeciążenie), odczekaj 2s i ponów
+            if (res.status === 503) {
+                console.warn(`[Gemini API] Model ${model} tymczasowo przeciążony (503). Ponawiam za 2 sekundy...`);
+                await new Promise(r => setTimeout(r, 2000));
+                res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
 
             if (res.ok) {
                 const data = await res.json();
@@ -56,38 +67,45 @@ async function callGemini(apiKey, systemInstruction, userContent) {
 
 /**
  * Agent 1: Ekspert Sportowy & Rygorystyczny Selekcjoner
- * Filtruje surowe dane bez żadnych dopisków ani zmyślonych pozycji.
  */
 async function runAgent1Curator(apiKey, rawScheduleJson) {
     console.log('[AI Agent 1: Ekspert Sportowy] Rygorystyczna selekcja danych...');
-    const systemPrompt = `Jesteś analitykiem danych sportowych. Twoim jedynym celem jest bezbłędna selekcja surowych danych ze Strumyka.
+    const systemPrompt = `Jesteś analitykiem danych sportowych. Twoim jedynym celem jest bezbłędna selekcja i kategoryzacja danych ze Strumyka.
 
-KRYTYCZNE ZASADY DANYCH:
-1. ZAKAZ dopisywania jakichkolwiek własnych opisów, komentarzy, żartów, opinii czy zmyślonych wyścigów/sesji!
-2. ZAKAZ wymyślania fałszywych godzin! Używaj WYŁĄCZNIE autentycznych godzin i wydarzeń podanych na wejściu.
-3. CZYSTE I PRZEJRZYSTE DANE: wyłącznie sucha, dokładna godzina i nazwa meczu/wydarzenia.
+KRYTYCZNE ZASADY DYSCYPLIN:
+1. SIATKÓWKA TO NIE PIŁKA NOŻNA!
+   - Każdy mecz siatkówki (np. Polska – Niemcy) MUSI być w sekcji SIATKÓWKA (sport: 'Siatkówka')!
+   - BEZWZGLĘDNY ZAKAZ umieszczania meczów siatkówki w piłce nożnej!
+2. UZUPEŁNIENIE PEŁNEGO HARMONOGRAMU WEEKENDU F1:
+   - Jeśli w danych pojawia się sesja Formuły 1 (np. trening w piątek), to oznacza, że w ten weekend odbywa się Grand Prix F1!
+   - W takim wypadku uzupełnij PEŁNY HARMONOGRAM CAŁEGO WEEKENDU F1 dla danego GP (Piątek, Sobota, Niedziela: wszystkie treningi, kwalifikacje i wyścig główny) z dokładnymi, rzeczywistymi godzinami czasu polskiego (CET/CEST).
+   - HARMONOGRAM F1 MUSI BYĆ CZYSTY, SUROWY I KONKRETNY:
+     🏎️ *Formuła 1 – GP [Pełna nazwa Grand Prix]:*
+     *Piątek:*
+     • *GG:MM* 1. sesja treningowa
+     • *GG:MM* 2. sesja treningowa
+     *Sobota:*
+     • *GG:MM* 3. sesja treningowa
+     • *GG:MM* Kwalifikacje
+     *Niedziela:*
+     • *GG:MM* Wyścig główny
+   - CAŁKOWITY ZAKAZ wymyślania fikcyjnych nazw GP, żartów czy komentarzy o kawie i strategiach! Czyste, rzeczywiste sesje i godziny.
+3. CZYSTE DANE:
+   - Zakaz jakichkolwiek opisów, komentarzy czy żartów. Wyłącznie godziny i nazwy rywali/sesji.
 
 KRYTERIA SELEKCJI (TYLKO TOP TIER / ELITA):
-- Piłka nożna: wyłącznie najwyższe ligi (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Ekstraklasa, Liga Portugal, Eredivisie itp.), Liga Mistrzów, Liga Mistrzyń UEFA, oficjalne mecze seniorskich reprezentacji (Liga Narodów, Eliminacje MŚ/ME).
-  BEZWZGLĘDNIE WYRZUĆ: 2. ligi, 3. ligi, 4. ligi (np. rumuńska 2. liga, czeska 2. liga), ligi młodzieżowe (U23, U21, U20, U19, U17), rezerwy (np. Celtic B, Tigre 2, Defensa 2) oraz sparingi klubowe!
-- Motosport: tylko Formuła 1 i MotoGP. Tylko rzeczywiste sesje podane w danych (treningi, kwalifikacje, wyścig). ZERO fikcyjnych harmonogramów!
-- Żużel: tylko PGE Ekstraliga i Speedway Grand Prix (wyrzuć 2. ligi i DMPJ).
-- Tenis: WYŁĄCZNIE mecze z udziałem Polaków (Świątek, Hurkacz, Linette, Fręch, Zieliński itp.) ORAZ TYLKO od półfinałów do finałów.
-- Piłka ręczna: WYŁĄCZNIE mecze seniorskiej reprezentacji Polski. Całkowicie usuń klubową piłkę ręczną!
-- Siatkówka: wyłącznie mecze reprezentacji seniorskich.
-- Magazyny sportowe: Sportowy Wieczór, Premier League Review, Liga+Extra, Magazyn PGE Ekstraliga, Ligomistrzowe Historie.
+- Piłka nożna: tylko najwyższe ligi (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Ekstraklasa itp.), Liga Mistrzów, Liga Mistrzyń UEFA, oficjalne mecze seniorskich reprezentacji narodowych.
+  Wyrzuć: 2. ligi, 3. ligi, ligi młodzieżowe (U20, U21, U19 itp.), rezerwy i sparingi!
+- Siatkówka: oficjalne mecze seniorskich reprezentacji (np. Polska – Niemcy).
+- Żużel: PGE Ekstraliga i Speedway Grand Prix.
+- Tenis: WYŁĄCZNIE mecze z udziałem Polaków (Świątek, Hurkacz itp.) ORAZ TYLKO faza półfinałów lub finałów.
+- Piłka ręczna: WYŁĄCZNIE seniorska reprezentacja Polski.
+- Magazyny: Sportowy Wieczór, Premier League Review, Liga+Extra itp.
 
 BEZWZGLĘDNIE WYELIMINUJ:
-- Sporty walki (UFC, MMA, boks, KSW)
-- Futsal
-- Kolarstwo
-- Hokej na lodzie
-- Krykiet
-- Koszykówkę (NBA, WNBA, Euroliga)
-- Dart, Golf, Baseball, Futbol amerykański.
+- Sporty walki (UFC, MMA, boks), Futsal, Kolarstwo, Hokej na lodzie, Krykiet, Koszykówkę, Dart, Golf, Baseball, Futbol amerykański.
 
-Pogrupuj zakwalifikowane wydarzenia na: DZIŚ, JUTRO, POJUTRZE.
-Nie dodawaj żadnych powitań ani wstępów.`;
+Pogrupuj zakwalifikowane wydarzenia na: DZIŚ, JUTRO, POJUTRZE.`;
 
     const userPrompt = `Oto dane ze Strumyka do przefiltrowania:\n${JSON.stringify(rawScheduleJson, null, 2)}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
@@ -95,22 +113,26 @@ Nie dodawaj żadnych powitań ani wstępów.`;
 
 /**
  * Agent 2: Perfekcyjny Formater WhatsApp (Gemini 3.8 Flash)
- * Pilnuje czystości, estetyki z emoji i czytelnego podziału na ligi.
  */
 async function runAgent2Verifier(apiKey, agent1Draft) {
     console.log('[AI Agent 2: Perfekcyjny Formater WhatsApp] Czyste i eleganckie formatowanie...');
     const systemPrompt = `Działasz jako precyzyjny edytor WhatsApp. Twój model: Gemini 3.8 Flash.
 Twoim celem jest sformatowanie danych od Agenta 1 w CZYSTY, PRZEJRZYSTY I ELEGANCKI sposób.
 
-ŻELAZNE ZASADY:
-- CAŁKOWITY ZAKAZ jakichkolwiek komentarzy, żartów, opinii, "figlarnych opisów" czy podsumowań!
-- CAŁKOWITY ZAKAZ zmyślania godzin lub sesji! Używaj wyłącznie godzin podanych w drafcie!
-- ŻADNYCH wstępów typu "Oto raport" i żadnych zakończeń. Zwróć WYŁĄCZNIE gotową wiadomość!
+ŻELAZNE ZASADY FORMATOWANIA:
+- SIATKÓWKA MUSI MIEĆ EMOJI 🏐: '🏐 *Siatkówka (Mecze Reprezentacji):*' (np. mecz Polska – Niemcy). NIGDY nie łącz siatkówki z piłką nożną (⚽)!
+- PIŁKA NOŻNA MUSI MIEĆ EMOJI ⚽: '⚽ *Mecze Reprezentacji / Liga Narodów:*' lub nazwa ligi ('⚽ *Liga Mistrzyń UEFA:*', '⚽ *Premier League:*').
+- FORMUŁA 1: zachowaj kompletny harmonogram weekendu F1 (Piątek, Sobota, Niedziela) w czystej, przejrzystej formie.
+- BEZWZGLĘDNY ZAKAZ pozostawiania pustych nagłówków (np. '📺 *' bez meczów pod spodem). Jeśli w danej kategorii nie ma meczów – usuń ją!
+- ZERO komentarzy, zero żartów, zero opinii. Czysty terminarz.
 
-DOKŁADNY WZÓR STRUKTURY:
+WZÓR STRUKTURY:
 🏆 *SPORTOWY ROZKŁAD JAZDY*
 
 *─── DZIŚ ───*
+
+🏐 *Siatkówka (Mecze Reprezentacji):*
+• *16:00* Polska – Niemcy
 
 ⚽ *Liga Mistrzyń UEFA:*
 • *16:45* Bayern Munich K – Manchester City K
@@ -125,17 +147,23 @@ DOKŁADNY WZÓR STRUKTURY:
 • *14:30* Irak – Oman
 • *18:00* Arabia Saudyjska – Kuwejt
 
-🏎️ *Formuła 1 / MotoGP:*
-• *14:00* Formuła 1 – GP Singapuru – Kwalifikacje
-
 *─── POJUTRZE ───*
-(jeśli są wydarzenia)
 
-ZASADY FORMATOWANIA:
-1. ZAWSZE punktor '• ' przed każdym meczem.
+🏎️ *Formuła 1 – GP [Nazwa]:*
+*Piątek:*
+• *GG:MM* 1. sesja treningowa
+• *GG:MM* 2. sesja treningowa
+*Sobota:*
+• *GG:MM* 3. sesja treningowa
+• *GG:MM* Kwalifikacje
+*Niedziela:*
+• *GG:MM* Wyścig główny
+
+ZASADY ESTETYKI:
+1. ZAWSZE punktor '• ' przed każdym meczem/sesją.
 2. ZAWSZE pogrubiona dokładna godzina ze Strumyka: '*GG:MM* '.
-3. ZAWSZE pogrubiony nagłówek dyscypliny/ligi z emoji (np. '⚽ *Premier League:*', '🏎️ *Formuła 1 / MotoGP:*', '🏁 *PGE Ekstraliga / Żużel:*', '🎾 *Tenis (Polacy - Finały):*', '📺 *Magazyny Sportowe:*').
-4. Dokładnie jedna pusta linijka między ligami dla maksymalnej przejrzystości na telefonie.`;
+3. Dokładnie jedna pusta linijka między ligami dla maksymalnej czytelności na telefonie.
+4. Zwróć WYŁĄCZNIE gotową wiadomość (bez wstępów i zakończeń).`;
 
     const userPrompt = `Oto draft do sformatowania pod WhatsApp:\n\n${agent1Draft}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
