@@ -1,0 +1,38 @@
+name: Daily Sports Intel WhatsApp Reporter
+
+on:
+  schedule:
+    # Uruchamianie codziennie o 6:00 UTC (8:00 czasu polskiego letniego CEST / 7:00 zimowego CET)
+    - cron: '0 6 * * *'
+  workflow_dispatch: # Przycisk ręcznego uruchomienia w interfejsie GitHub Actions
+
+jobs:
+  scrape-and-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Google Chrome (Headless Runner)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Run Daily Sports Report & Send WhatsApp
+        env:
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_API_KEY: ${{ secrets.CALLMEBOT_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CHROME_BIN: /usr/bin/google-chrome-stable
+        run: |
+          node daily_report.js

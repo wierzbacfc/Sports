@@ -1,0 +1,12 @@
+{
+  "name": "sports-intel-whatsapp",
+  "version": "1.0.0",
+  "description": "Automatyczny codzienne terminarz najważniejszych wydarzeń sportowych ze Strumyka na WhatsApp",
+  "main": "daily_report.js",
+  "scripts": {
+    "start": "node daily_report.js"
+  },
+  "keywords": ["sports", "whatsapp", "strumyk", "automation"],
+  "author": "",
+  "license": "MIT"
+}
