@@ -78,7 +78,7 @@ async function run() {
 
     // 4. Zaangażowanie Zespołu Agentów AI (jeśli podano GEMINI_API_KEY)
     if (GEMINI_API_KEY) {
-        console.log('\n--- Uruchamianie Zespołu 2 Agentów AI (Gemini) ---');
+        console.log('\n--- Uruchamianie Zespołu 2 Agentów AI (Gemini Pro/Flash) ---');
         try {
             // Agent 1: Ekspert & Kurator
             const agent1Draft = await runAgent1Curator(GEMINI_API_KEY, preliminarySchedule);
@@ -87,11 +87,11 @@ async function run() {
             finalReportText = await runAgent2Verifier(GEMINI_API_KEY, agent1Draft);
             console.log('✅ Zespół Agentów AI pomyślnie zweryfikował i sformatował raport!');
         } catch (err) {
-            console.warn('⚠️ Ostrzeżenie: Błąd podczas pracy agentów AI:', err.message);
-            console.log('Przełączanie na zapasowy algorytm regułowy...');
+            console.error('❌ Błąd krytyczny podczas pracy agentów AI:', err.message);
+            console.log('Przełączanie na awaryjny algorytm...');
         }
     } else {
-        console.log('ℹ️ Brak GEMINI_API_KEY - generowanie raportu za pomocą wbudowanego filtra regułowego.');
+        console.error('⚠️ OSTRZEŻENIE: Brak GEMINI_API_KEY w GitHub Secrets! Upewnij się, że dodałeś secret o nazwie GEMINI_API_KEY w ustawieniach repozytorium.');
     }
 
     // Jeśli brak AI lub wystąpił błąd, używamy wbudowanego formatowania awaryjnego
@@ -115,8 +115,8 @@ async function run() {
         }
     }
 
-    // 5. Podział na wiadomości i wysyłka przez CallMeBot na WhatsApp
-    const messages = splitMessage(finalReportText, 2000);
+    // 5. Podział na wiadomości (max 900 znaków, aby CallMeBot nigdy nic nie obciął)
+    const messages = splitMessage(finalReportText, 900);
     console.log(`\nPrzygotowano ${messages.length} części wiadomości do wysłania na WhatsApp (${PHONE}).`);
 
     for (let i = 0; i < messages.length; i++) {

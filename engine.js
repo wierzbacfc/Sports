@@ -259,13 +259,21 @@ function processEvents(rawEvents) {
         'boks',
         'mma',
         'futsal',
-        'kolarstwo'
+        'kolarstwo',
+        'krykiet',
+        'hokej',
+        'snooker',
+        'badminton',
+        'curling',
+        'pilkawodna',
+        'pilkaplazowa'
     ];
 
     const lowerTierKeywords = [
-        '2. liga', '3. liga', 'u23', 'u19', 'challenger',
+        '2. liga', '3. liga', '4. liga', 'u23', 'u21', 'u20', 'u19', 'u18', 'u17', 'challenger',
         'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2',
-        'serie b', 'revelação', 'dmpj', 'cro race', 'itf'
+        'serie b', 'revelação', 'dmpj', 'cro race', 'itf',
+        'celtic b', 'rezerwy', 'ii liga'
     ];
 
     const polishTennisKeywords = [
