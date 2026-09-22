@@ -13,7 +13,7 @@ async function callGemini(apiKey, systemInstruction, userContent) {
             parts: [{ text: systemInstruction }]
         },
         generationConfig: {
-            temperature: 0.1
+            temperature: 0.2
         }
     };
 
@@ -34,80 +34,98 @@ async function callGemini(apiKey, systemInstruction, userContent) {
 
 /**
  * Agent 1: Ekspert Sportowy & Selekcjoner
- * Filtruje surowe dane, odrzuca niższe ligi i niechciane dyscypliny, grupuje według dni i lig.
+ * Filtruje surowe dane, eliminuje niechciane sporty, tworzy figlarny harmonogram F1.
  */
 async function runAgent1Curator(apiKey, rawScheduleJson) {
-    console.log('[AI Agent 1: Ekspert Sportowy] Selekcja i filtrowanie surowych wydarzeń...');
-    const systemPrompt = `Jesteś rygorystycznym analitykiem i kuratorem wydarzeń sportowych.
+    console.log('[AI Agent 1: Ekspert Sportowy] Selekcja, filtrowanie i tworzenie harmonogramu...');
+    const systemPrompt = `Jesteś rygorystycznym, ale błyskotliwym analitykiem i kuratorem wydarzeń sportowych.
 Otrzymujesz surowy zbiór wydarzeń pobranych ze Strumyka podzielony na DZIŚ, JUTRO i POJUTRZE.
 
-TWOJE JEDYNE ZADANIE:
-1. Przefiltruj wydarzenia, pozostawiając WYŁĄCZNIE najwyższy poziom rozgrywkowy (TOP TIER / Elita / Mecze hitowe):
-   - Piłka nożna: tylko najwyższe ligi (np. Ekstraklasa, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Eredivisie itp.), europejskie puchary, mecze reprezentacji. BEZWZGLĘDNIE USUŃ: 2. ligi, 3. ligi, rozgrywki U23/U19, sparingi.
-   - Żużel: tylko PGE Ekstraliga (finały, mecze o medale, runda zasadnicza) oraz Speedway Grand Prix. USUŃ 2. ligi i DMPJ.
+TWOJE ZADANIA:
+1. POZOSTAW WYŁĄCZNIE NAJWYŻSZY POZIOM ROZGRYWKOWY (TOP TIER / Elita / Hity):
+   - Piłka nożna: tylko najwyższe ligi (Ekstraklasa, Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Eredivisie itp.), europejskie puchary (Liga Mistrzów, Liga Mistrzyń), mecze reprezentacji. BEZWZGLĘDNIE USUŃ: 2. ligi, 3. ligi, rozgrywki U23/U19, sparingi.
+   - Żużel: tylko PGE Ekstraliga i Speedway Grand Prix. USUŃ 2. ligi i DMPJ.
    - Motosport: tylko Formuła 1 i MotoGP.
    - Siatkówka: mecze reprezentacji narodowych.
    - Magazyny sportowe: główne podsumowania (np. Liga+Extra, Magazyn PGE Ekstraliga, Sportowy Wieczór).
-   
-   ŚCISŁE REGUŁY DLA WYBRANYCH DYSCYPLIN:
-   - TENIS: Zostaw mecze tenisowe WYŁĄCZNIE wtedy, gdy grają Polacy (np. Iga Świątek, Hubert Hurkacz, Magda Linette, Magdalena Fręch, Jan Zieliński, Polska w Pucharze Davisa / BJK Cup itp.) ORAZ TYLKO gdy jest to faza PÓŁFINAŁÓW LUB FINAŁÓW. Wszystkie mecze bez Polaków oraz wszystkie wcześniejsze rundy (1/32, 1/16, ćwierćfinały) BEZWZGLĘDNIE ODRZUĆ!
+
+2. ŚCISŁE REGUŁY SPECJALNE:
+   - TENIS: Zostaw mecze tenisowe WYŁĄCZNIE wtedy, gdy grają Polacy (np. Iga Świątek, Hubert Hurkacz, Magda Linette, Magdalena Fręch, Jan Zieliński itp.) ORAZ TYLKO gdy jest to faza PÓŁFINAŁÓW LUB FINAŁÓW. Wszystkie mecze bez Polaków oraz wszystkie wcześniejsze rundy (1/32, 1/16, ćwierćfinały) BEZWZGLĘDNIE ODRZUĆ!
    - PIŁKA RĘCZNA: WYŁĄCZNIE mecze reprezentacji Polski. Całkowicie wykasuj klubową piłkę ręczną!
 
-2. CAŁKOWICIE I BEZWZGLĘDNIE WYELIMINUJ:
+3. CAŁKOWICIE I BEZWZGLĘDNIE WYELIMINUJ:
    - Sporty walki (UFC, MMA, boks - USUNIĘTE!)
    - Futsal (USUNIĘTY!)
    - Kolarstwo (USUNIĘTE!)
    - Sporty amerykańskie: Futbol amerykański (NFL), Baseball (MLB), WNBA.
-   - Dart.
-   - Golf.
-   - Koszykówkę.
+   - Dart, Golf, Koszykówkę.
 
-3. Pogrupuj wydarzenia według dni (DZIŚ, JUTRO, POJUTRZE) oraz podkategorii lig/dyscyplin z godzinami.
+4. 🏎️ SPECJALNE ZADANIE DLA FORMUŁY 1 (F1):
+   Jeśli w wydarzeniach pojawia się Formuła 1 (lub zbliża się weekend wyścigowy GP F1):
+   Napisz dedykowaną, wyróżnioną sekcję:
+   🏎️ *FIGLARNY ROZKŁAD JAZDY F1 – [NAZWA GP]*
+   Rozpisz figlarny, dowcipny i zadziorny harmonogram CAŁEGO weekendu F1 z dokładnymi godzinami:
+   - Piątek (Treningi / Kwalifikacje do Sprintu)
+   - Sobota (Sprint / Trening 3 / Kwalifikacje)
+   - Niedziela (Wyścig główny)
+   Dodaj do każdej sesji krótki, figlarny, żartobliwy komentarz (np. o paleniu opon, strategiach Ferrari, szukaniu limitów toru czy porze na kawkę i popcorn).
 
-4. ZAKAZ: Nie twórz żadnych esejów, wstępów, powitań, ani komentarzy do meczów. Chcemy tylko i wyłącznie czystą, uporządkowaną listę wydarzeń!`;
+5. Uporządkuj wydarzenia według dni: DZIŚ, JUTRO, POJUTRZE. Nie pisz żadnych wstępów powitalnych typu 'Cześć'.`;
 
     const userPrompt = `Oto surowe dane ze Strumyka do przefiltrowania:\n${JSON.stringify(rawScheduleJson, null, 2)}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
 }
 
 /**
- * Agent 2: Weryfikator & Kontroler Jakości
- * Sprawdza poprawność filtrowania Agenta 1, eliminuje ewentualne przeoczenia i formatuje pod WhatsApp.
+ * Agent 2: Weryfikator & Perfekcyjny Formater WhatsApp
+ * Dba o idealne formatowanie WhatsApp, audytuje wykluczenia i pilnuje czytelności.
  */
 async function runAgent2Verifier(apiKey, agent1Draft) {
-    console.log('[AI Agent 2: Weryfikator & Kontroler Jakości] Audyt i weryfikacja raportu...');
-    const systemPrompt = `Działasz jako bezwzględny audytor i kontroler jakości raportu sportowego przeznaczonego do wysyłki na WhatsApp.
-Twoim celem jest sprawdzenie zestawienia przygotowanego przez Agenta 1 i upewnienie się, że spełnia w 100% poniższe reguły:
+    console.log('[AI Agent 2: Weryfikator & Formater WhatsApp] Audyt i finalne formatowanie...');
+    const systemPrompt = `Działasz jako bezwzględny audytor i grafik-redaktor wiadomości na WhatsApp.
+Twoim celem jest doprowadzenie zestawienia od Agenta 1 do IDEALNEJ, czytelnej postaci na ekranie telefonu.
 
-1. KONTROLA WYKLUCZONYCH DYSCYPLIN:
-   - Czy na pewno NIE MA sportów walki (UFC, MMA, boks)? Jeśli są – usuń.
-   - Czy na pewno NIE MA futsalu? Jeśli jest – usuń.
-   - Czy na pewno NIE MA kolarstwa? Jeśli jest – usuń.
-   - Brak sportów amerykańskich (NFL, MLB, WNBA), darta, golfa, koszykówki.
-2. KONTROLA TENISA:
-   - Tenis może zawierać WYŁĄCZNIE mecze Polaków (Świątek, Hurkacz, Linette, Fręch, Zieliński, rep. Polski) i TYLKO od fazy półfinałów do finałów. Jeśli widzisz mecz bez Polaków lub wcześniejszą rundę – natychmiast usuń.
-3. KONTROLA PIŁKI RĘCZNEJ:
-   - Piłka ręczna może dotyczyć WYŁĄCZNIE meczów reprezentacji Polski. Jeśli widzisz mecze klubowe – usuń je.
-4. KONTROLA NIŻSZYCH LIG:
-   - Czy nie prześlizgnęła się żadna 2. liga, 3. liga, zaplecze, rozgrywki U23, Challenger lub ITF? Jeśli tak, natychmiast ją wykreśl.
-5. FORMATOWANIE WHATSAPP:
-   - Zastosuj formatowanie WhatsApp: *pogrubienie* godzin i nagłówków lig.
-   - Zachowaj czytelną strukturę:
-     🏆 *SPORTOWY ROZKŁAD JAZDY*
-     
-     *─── DZIŚ ───*
-     (mecze pogrupowane ligami)
-     
-     *─── JUTRO ───*
-     (mecze na jutro)
-     
-     *─── POJUTRZE ───*
-     (mecze na pojutrze)
-   - Używaj odpowiednich emoji dla dyscyplin.
+1. AUDYT WYKLUCZEŃ:
+   - Czy na pewno nie ma sportów walki (UFC/MMA/boks), futsalu, kolarstwa, darta, golfa, koszykówki, NFL, MLB? Jeśli są – usuń.
+   - Czy tenis to WYŁĄCZNIE Polacy i tylko faza półfinałów/finałów? Jeśli nie – usuń.
+   - Czy piłka ręczna to tylko reprezentacja Polski? Jeśli nie – usuń.
+   - Czy nie ma 2. i 3. lig piłkarskich? Jeśli są – usuń.
 
-6. Zwróć WYŁĄCZNIE ostateczną, zweryfikowaną treść wiadomości gotową do wysłania. Nie dodawaj żadnych własnych uwag ("Oto zweryfikowany raport"), żadnych wstępów ani komentarzy.`;
+2. ŚCIŚLE WYMAGANE FORMATOWANIE WHATSAPP (WZÓR):
+   Wiadomość MUSI wyglądać dokładnie w tym schemacie:
 
-    const userPrompt = `Oto draft sporządzony przez Agenta 1 do zweryfikowania i finalnego sformatowania:\n\n${agent1Draft}`;
+   🏆 *SPORTOWY ROZKŁAD JAZDY*
+
+   *─── DZIŚ ───*
+   ⚽ *Liga / Rozgrywki:*
+   • *16:45* Bayern Munich K – Manchester City K
+   • *19:00* Real Madrid K – PSG K
+
+   🏐 *Siatkówka (Mecze Reprezentacji):*
+   • *16:00* Polska – Niemcy
+
+   📺 *Magazyn Sportowy:*
+   • *20:00* Sportowy Wieczór
+
+   *─── JUTRO ───*
+   ⚽ *Mecze Reprezentacji:*
+   • *14:30* Irak – Oman
+
+   *─── POJUTRZE ───*
+   (wydarzenia na pojutrze)
+
+   🏎️ *FIGLARNY ROZKŁAD JAZDY F1 – [NAZWA GP]*
+   (pełny, dowcipny harmonogram weekendu z godzinami, jeśli F1 jest zaplanowane)
+
+3. ŻELAZNE ZASADY FORMATOWANIA:
+   - ZAWSZE punktor '• ' przed każdym wydarzeniem.
+   - ZAWSZE pogrubiona godzina: '*GG:MM* ' przed nazwami rywali.
+   - Pogrubione nagłówki z emoji (np. '⚽ *PKO BP Ekstraklasa:*').
+   - Odstęp (jedna pusta linijka) między różnymi ligami/kategoriami dla pełnej przejrzystości.
+   - Jeśli jest F1, upewnij się, że figlarny harmonogram weekendu jest kompletny i nieurwany!
+   - Zwróć WYŁĄCZNIE ostateczną treść wiadomości, bez żadnych metakomentarzy ("Oto raport").`;
+
+    const userPrompt = `Oto draft sporządzony przez Agenta 1 do audytu i idealnego sformatowania pod WhatsApp:\n\n${agent1Draft}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
 }
 

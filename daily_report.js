@@ -12,19 +12,29 @@ async function sleep(ms) {
 }
 
 // Podział długiej wiadomości na części (limit WhatsApp/CallMeBot: ~2000 znaków)
-function splitMessage(text, maxChunk = 2000) {
-    if (text.length <= maxChunk) return [text.trim()];
-
-    const lines = text.split('\n');
+function splitMessage(text, maxChunk = 900) {
+    // Podział po głównych sekcjach dni lub F1, aby nie obcinać tekstu
+    const sections = text.split(/(?=\*───|\n🏎️ \*FIGLARNY)/g);
     const chunks = [];
     let current = '';
 
-    for (const line of lines) {
-        if ((current + line).length > maxChunk) {
-            if (current.trim()) chunks.push(current.trim());
+    for (const sec of sections) {
+        if ((current + sec).length > maxChunk && current.trim()) {
+            chunks.push(current.trim());
             current = '';
         }
-        current += line + '\n';
+        if (sec.length > maxChunk) {
+            const lines = sec.split('\n');
+            for (const line of lines) {
+                if ((current + line).length > maxChunk && current.trim()) {
+                    chunks.push(current.trim());
+                    current = '';
+                }
+                current += line + '\n';
+            }
+        } else {
+            current += sec;
+        }
     }
     if (current.trim()) chunks.push(current.trim());
     return chunks;
