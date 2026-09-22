@@ -3,10 +3,7 @@
 const MODELS = [
     'gemini-3.8-flash',
     'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash'
+    'gemini-2.5-flash'
 ];
 
 async function callGemini(apiKey, systemInstruction, userContent) {
@@ -26,7 +23,7 @@ async function callGemini(apiKey, systemInstruction, userContent) {
                     parts: [{ text: systemInstruction }]
                 },
                 generationConfig: {
-                    temperature: 0.1
+                    temperature: 0.0
                 }
             };
 
@@ -41,7 +38,7 @@ async function callGemini(apiKey, systemInstruction, userContent) {
                 const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (text && text.trim().length > 0) {
                     console.log(`[Gemini API] Sukces z modelem: ${model}`);
-                    return text;
+                    return text.trim();
                 }
             } else {
                 const errText = await res.text();
@@ -58,101 +55,89 @@ async function callGemini(apiKey, systemInstruction, userContent) {
 }
 
 /**
- * Agent 1: Ekspert Sportowy & Selekcjoner
- * Filtruje surowe dane, eliminuje niechciane sporty, tworzy figlarny harmonogram F1.
+ * Agent 1: Ekspert Sportowy & Rygorystyczny Selekcjoner
+ * Filtruje surowe dane bez żadnych dopisków ani zmyślonych pozycji.
  */
 async function runAgent1Curator(apiKey, rawScheduleJson) {
-    console.log('[AI Agent 1: Ekspert Sportowy] Rygorystyczna selekcja i filtrowanie...');
-    const systemPrompt = `Jesteś elitarnym analitykiem sportowym o ogromnej wiedzy o ligach i drużynach całego świata.
-Otrzymujesz surowy zbiór wydarzeń pobranych ze Strumyka podzielony na DZIŚ, JUTRO i POJUTRZE.
+    console.log('[AI Agent 1: Ekspert Sportowy] Rygorystyczna selekcja danych...');
+    const systemPrompt = `Jesteś analitykiem danych sportowych. Twoim jedynym celem jest bezbłędna selekcja surowych danych ze Strumyka.
 
-TWOJE ZADANIA:
-1. POZOSTAW WYŁĄCZNIE NAJWYŻSZY POZIOM ROZGRYWKOWY (TOP TIER / Elita / Hity):
-   - Piłka nożna: tylko i wyłącznie NAJWYŻSZE ligi krajowe (np. Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Ekstraklasa, Liga Portugal, Eredivisie itp.), europejskie puchary (Liga Mistrzów, Liga Mistrzyń), oficjalne mecze seniorskich reprezentacji narodowych.
-     BEZWZGLĘDNIE WYRZUĆ: 2. ligi, 3. ligi, 4. ligi, niszowe ligi lokalne, rozgrywki rezerw (np. Celtic B), puchary regionalne, mecze U23, U21, U20, U19, U17 oraz wszelkie sparingi!
-   - Żużel: tylko PGE Ekstraliga i Speedway Grand Prix. WYRZUĆ 2. ligi i DMPJ.
-   - Motosport: tylko Formuła 1 i MotoGP.
-   - Siatkówka: tylko oficjalne mecze seniorskich reprezentacji narodowych (zwłaszcza reprezentacji Polski).
-   - Magazyny sportowe: tylko główne podsumowania (Liga+Extra, Magazyn PGE Ekstraliga, Sportowy Wieczór).
+KRYTYCZNE ZASADY DANYCH:
+1. ZAKAZ dopisywania jakichkolwiek własnych opisów, komentarzy, żartów, opinii czy zmyślonych wyścigów/sesji!
+2. ZAKAZ wymyślania fałszywych godzin! Używaj WYŁĄCZNIE autentycznych godzin i wydarzeń podanych na wejściu.
+3. CZYSTE I PRZEJRZYSTE DANE: wyłącznie sucha, dokładna godzina i nazwa meczu/wydarzenia.
 
-2. ŚCISŁE REGUŁY SPECJALNE DLA DYSCYPLIN:
-   - TENIS: Zostaw mecze tenisowe WYŁĄCZNIE wtedy, gdy grają Polacy (np. Iga Świątek, Hubert Hurkacz, Magda Linette, Magdalena Fręch, Jan Zieliński itp.) ORAZ TYLKO gdy jest to faza PÓŁFINAŁÓW LUB FINAŁÓW. Wszystkie mecze bez Polaków oraz wszystkie wcześniejsze rundy (1/32, 1/16, ćwierćfinały) BEZWZGLĘDNIE ODRZUĆ!
-   - PIŁKA RĘCZNA: WYŁĄCZNIE mecze reprezentacji Polski. Całkowicie wykasuj klubową piłkę ręczną!
+KRYTERIA SELEKCJI (TYLKO TOP TIER / ELITA):
+- Piłka nożna: wyłącznie najwyższe ligi (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Ekstraklasa, Liga Portugal, Eredivisie itp.), Liga Mistrzów, Liga Mistrzyń UEFA, oficjalne mecze seniorskich reprezentacji (Liga Narodów, Eliminacje MŚ/ME).
+  BEZWZGLĘDNIE WYRZUĆ: 2. ligi, 3. ligi, 4. ligi (np. rumuńska 2. liga, czeska 2. liga), ligi młodzieżowe (U23, U21, U20, U19, U17), rezerwy (np. Celtic B, Tigre 2, Defensa 2) oraz sparingi klubowe!
+- Motosport: tylko Formuła 1 i MotoGP. Tylko rzeczywiste sesje podane w danych (treningi, kwalifikacje, wyścig). ZERO fikcyjnych harmonogramów!
+- Żużel: tylko PGE Ekstraliga i Speedway Grand Prix (wyrzuć 2. ligi i DMPJ).
+- Tenis: WYŁĄCZNIE mecze z udziałem Polaków (Świątek, Hurkacz, Linette, Fręch, Zieliński itp.) ORAZ TYLKO od półfinałów do finałów.
+- Piłka ręczna: WYŁĄCZNIE mecze seniorskiej reprezentacji Polski. Całkowicie usuń klubową piłkę ręczną!
+- Siatkówka: wyłącznie mecze reprezentacji seniorskich.
+- Magazyny sportowe: Sportowy Wieczór, Premier League Review, Liga+Extra, Magazyn PGE Ekstraliga, Ligomistrzowe Historie.
 
-3. CAŁKOWICIE I BEZWZGLĘDNIE WYELIMINUJ:
-   - Sporty walki (UFC, MMA, boks - USUNIĘTE!)
-   - Futsal (USUNIĘTY!)
-   - Kolarstwo (USUNIĘTE!)
-   - Hokej na lodzie (USUNIĘTY!)
-   - Krykiet (np. Anglia - Sri Lanka - USUNIĘTY!)
-   - Sporty amerykańskie: Futbol amerykański (NFL), Baseball (MLB), WNBA.
-   - Dart, Golf, Koszykówkę.
+BEZWZGLĘDNIE WYELIMINUJ:
+- Sporty walki (UFC, MMA, boks, KSW)
+- Futsal
+- Kolarstwo
+- Hokej na lodzie
+- Krykiet
+- Koszykówkę (NBA, WNBA, Euroliga)
+- Dart, Golf, Baseball, Futbol amerykański.
 
-4. 🏎️ SPECJALNE ZADANIE DLA FORMUŁY 1 (F1):
-   Jeśli w wydarzeniach pojawia się Formuła 1 (lub zbliża się weekend wyścigowy GP F1):
-   Napisz dedykowaną, wyróżnioną sekcję:
-   🏎️ *FIGLARNY ROZKŁAD JAZDY F1 – [NAZWA GP]*
-   Rozpisz figlarny, dowcipny i zadziorny harmonogram CAŁEGO weekendu F1 z dokładnymi godzinami:
-   - Piątek (Treningi / Kwalifikacje do Sprintu)
-   - Sobota (Sprint / Trening 3 / Kwalifikacje)
-   - Niedziela (Wyścig główny)
-   Dodaj do każdej sesji krótki, figlarny, żartobliwy komentarz (np. o paleniu opon, strategiach Ferrari, limitach toru, kawie i popcornie).
+Pogrupuj zakwalifikowane wydarzenia na: DZIŚ, JUTRO, POJUTRZE.
+Nie dodawaj żadnych powitań ani wstępów.`;
 
-5. Pogrupuj wydarzenia według dni: DZIŚ, JUTRO, POJUTRZE. Nie pisz żadnych wstępów powitalnych typu 'Cześć'.`;
-
-    const userPrompt = `Oto surowe dane ze Strumyka do przefiltrowania:\n${JSON.stringify(rawScheduleJson, null, 2)}`;
+    const userPrompt = `Oto dane ze Strumyka do przefiltrowania:\n${JSON.stringify(rawScheduleJson, null, 2)}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
 }
 
 /**
- * Agent 2: Weryfikator & Perfekcyjny Formater WhatsApp
- * Dba o idealne formatowanie WhatsApp, audytuje wykluczenia i pilnuje czytelności.
+ * Agent 2: Perfekcyjny Formater WhatsApp (Gemini 3.8 Flash)
+ * Pilnuje czystości, estetyki z emoji i czytelnego podziału na ligi.
  */
 async function runAgent2Verifier(apiKey, agent1Draft) {
-    console.log('[AI Agent 2: Weryfikator & Perfekcyjny Formater] Audyt jakości i formatowanie...');
-    const systemPrompt = `Działasz jako bezwzględny audytor i grafik-redaktor wiadomości na WhatsApp.
-Twoim celem jest sprawdzenie zestawienia od Agenta 1 i doprowadzenie go do IDEALNEJ, eleganckiej postaci na telefonie.
+    console.log('[AI Agent 2: Perfekcyjny Formater WhatsApp] Czyste i eleganckie formatowanie...');
+    const systemPrompt = `Działasz jako precyzyjny edytor WhatsApp. Twój model: Gemini 3.8 Flash.
+Twoim celem jest sformatowanie danych od Agenta 1 w CZYSTY, PRZEJRZYSTY I ELEGANCKI sposób.
 
-1. AUDYT I BEZWZGLĘDNA CZYSZCZKA:
-   - Czy na liście jest jakikolwiek krykiet, hokej, futsal, kolarstwo, sporty walki, dart, golf, koszykówka, NFL, MLB? Jeśli tak – NATYCHMIAST TO WYKREŚL.
-   - Czy są mecze młodzieżowe (U23, U20, U19, U17), rezerwy (np. Celtic B), 2. lub 3. ligi (np. rumuńska, czeska, szwajcarska)? Jeśli tak – NATYCHMIAST TO WYKREŚL.
-   - Czy tenis to WYŁĄCZNIE Polacy i tylko faza półfinałów/finałów? Jeśli nie – usuń.
-   - Czy piłka ręczna to tylko reprezentacja Polski? Jeśli nie – usuń.
+ŻELAZNE ZASADY:
+- CAŁKOWITY ZAKAZ jakichkolwiek komentarzy, żartów, opinii, "figlarnych opisów" czy podsumowań!
+- CAŁKOWITY ZAKAZ zmyślania godzin lub sesji! Używaj wyłącznie godzin podanych w drafcie!
+- ŻADNYCH wstępów typu "Oto raport" i żadnych zakończeń. Zwróć WYŁĄCZNIE gotową wiadomość!
 
-2. IDEALNY WZÓR FORMATOWANIA WHATSAPP:
-   Wiadomość MUSI wyglądać dokładnie w tym schemacie:
+DOKŁADNY WZÓR STRUKTURY:
+🏆 *SPORTOWY ROZKŁAD JAZDY*
 
-   🏆 *SPORTOWY ROZKŁAD JAZDY*
+*─── DZIŚ ───*
 
-   *─── DZIŚ ───*
-   ⚽ *Liga Mistrzyń:*
-   • *16:45* Bayern Munich K – Manchester City K
-   • *19:00* Real Madrid K – PSG K
+⚽ *Liga Mistrzyń UEFA:*
+• *16:45* Bayern Munich K – Manchester City K
+• *19:00* Arsenal K – Koge K
 
-   🏐 *Siatkówka (Mecze Reprezentacji):*
-   • *16:00* Polska – Niemcy
+📺 *Magazyny Sportowe:*
+• *20:00* Sportowy Wieczór
 
-   📺 *Magazyn Sportowy:*
-   • *20:00* Sportowy Wieczór
+*─── JUTRO ───*
 
-   *─── JUTRO ───*
-   ⚽ *Mecze Reprezentacji:*
-   • *14:30* Irak – Oman
+⚽ *Mecze Reprezentacji / Liga Narodów:*
+• *14:30* Irak – Oman
+• *18:00* Arabia Saudyjska – Kuwejt
 
-   *─── POJUTRZE ───*
-   (tylko jeśli są wydarzenia spełniające kryteria)
+🏎️ *Formuła 1 / MotoGP:*
+• *14:00* Formuła 1 – GP Singapuru – Kwalifikacje
 
-   🏎️ *FIGLARNY ROZKŁAD JAZDY F1 – [NAZWA GP]*
-   (pełny, dowcipny harmonogram weekendu z godzinami, jeśli F1 jest w ten weekend)
+*─── POJUTRZE ───*
+(jeśli są wydarzenia)
 
-3. ŻELAZNE REGUŁY ESTETYKI:
-   - ZAWSZE punktor '• ' przed każdym wydarzeniem.
-   - ZAWSZE pogrubiona godzina: '*GG:MM* ' przed nazwami rywali.
-   - Pogrubiony nagłówek ligi z emoji (np. '⚽ *PKO BP Ekstraklasa:*').
-   - Jedna pusta linijka między ligami/kategoriami dla pełnej przejrzystości.
-   - Nie dodawaj żadnych własnych uwag, komentarzy ("Oto raport") ani podsumowań na końcu. Tylko i wyłącznie gotowa wiadomość!`;
+ZASADY FORMATOWANIA:
+1. ZAWSZE punktor '• ' przed każdym meczem.
+2. ZAWSZE pogrubiona dokładna godzina ze Strumyka: '*GG:MM* '.
+3. ZAWSZE pogrubiony nagłówek dyscypliny/ligi z emoji (np. '⚽ *Premier League:*', '🏎️ *Formuła 1 / MotoGP:*', '🏁 *PGE Ekstraliga / Żużel:*', '🎾 *Tenis (Polacy - Finały):*', '📺 *Magazyny Sportowe:*').
+4. Dokładnie jedna pusta linijka między ligami dla maksymalnej przejrzystości na telefonie.`;
 
-    const userPrompt = `Oto draft od Agenta 1 do zweryfikowania i perfekcyjnego sformatowania:\n\n${agent1Draft}`;
+    const userPrompt = `Oto draft do sformatowania pod WhatsApp:\n\n${agent1Draft}`;
     return await callGemini(apiKey, systemPrompt, userPrompt);
 }
 

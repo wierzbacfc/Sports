@@ -13,8 +13,8 @@ async function sleep(ms) {
 
 // Podział długiej wiadomości na części (limit WhatsApp/CallMeBot: ~2000 znaków)
 function splitMessage(text, maxChunk = 900) {
-    // Podział po głównych sekcjach dni lub F1, aby nie obcinać tekstu
-    const sections = text.split(/(?=\*───|\n🏎️ \*FIGLARNY)/g);
+    // Podział po głównych sekcjach dni, aby nie obcinać tekstu
+    const sections = text.split(/(?=\*───)/g);
     const chunks = [];
     let current = '';
 
