@@ -2,11 +2,11 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const CONFIG_FILE = path.join(__dirname, '..', 'config.json');
+const CONFIG_FILE = path.join(__dirname, 'config.json');
 
 const CANDIDATE_DOMAINS = [
-    'https://strumyk.cv',
     'https://strumyk.ca',
+    'https://strumyk.cv',
     'https://strumyk.xyz',
     'https://strumyk.cc',
     'https://strumyk.tv',
@@ -19,7 +19,7 @@ function loadConfig() {
             return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
         }
     } catch (e) {}
-    return { current_domain: 'https://strumyk.cv' };
+    return { current_domain: 'https://strumyk.ca' };
 }
 
 function saveConfig(cfg) {
@@ -32,11 +32,9 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 1. Domain Auto-Discovery
-async function discoverWorkingDomain() {
-    console.log('[Auto-Discovery] Sprawdzanie aktywnych domen Strumyka...');
-    
-    // Step 1: Check Rentry.co/strumyk official registry
+// 1. Domain Discovery
+async function getCandidateDomains() {
+    const list = [];
     try {
         const rentryRes = await fetch('https://rentry.co/strumyk', { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (rentryRes.ok) {
@@ -44,34 +42,15 @@ async function discoverWorkingDomain() {
             const matches = rentryHtml.match(/https?:\/\/(?:www\.)?strumyk\.[a-z]{2,4}\/?/gi);
             if (matches && matches.length > 0) {
                 const unique = [...new Set(matches.map(u => u.replace(/\/$/, '')))];
-                console.log('[Auto-Discovery] Znaleziono domeny na Rentry:', unique);
-                for (const url of unique) {
-                    try {
-                        const check = await fetch(url, { method: 'HEAD', redirect: 'follow' });
-                        if (check.status === 200 || check.status === 403) {
-                            console.log(`[Auto-Discovery] Aktywna domena: ${url}`);
-                            return url;
-                        }
-                    } catch (e) {}
-                }
+                list.push(...unique);
             }
         }
-    } catch (e) {
-        console.warn('[Auto-Discovery] Błąd sprawdzania Rentry:', e.message);
-    }
+    } catch (e) {}
 
-    // Step 2: Fallback list check
-    for (const url of CANDIDATE_DOMAINS) {
-        try {
-            const check = await fetch(url, { method: 'HEAD' });
-            if (check.status === 200 || check.status === 403) {
-                console.log(`[Auto-Discovery] Odpowiada mirror z listy rezerwowej: ${url}`);
-                return url;
-            }
-        } catch (e) {}
+    for (const d of CANDIDATE_DOMAINS) {
+        if (!list.includes(d)) list.push(d);
     }
-
-    return 'https://strumyk.cv';
+    return list;
 }
 
 // 2. CDP Stealth Scraper
@@ -104,31 +83,45 @@ function getBrowserExecutable() {
         }
         return 'msedge.exe';
     } else {
-        // Linux (GitHub Actions runner)
         return process.env.CHROME_BIN || '/usr/bin/google-chrome' || 'google-chrome' || 'google-chrome-stable';
     }
 }
 
-async function fetchStrumykData(targetUrl) {
+async function fetchStrumykData(preferredDomain) {
     const browserPath = getBrowserExecutable();
-    const profileDir = path.join(__dirname, '..', '.edge_profile');
+    const profileDir = path.join(__dirname, '.browser_profile');
 
-    console.log(`[CDP] Uruchamianie przeglądarki (${browserPath}) przeciwko ${targetUrl}...`);
+    // Build candidates list: preferred first, then all others
+    const allCandidates = await getCandidateDomains();
+    const candidateUrls = [preferredDomain, ...allCandidates.filter(d => d !== preferredDomain)];
+
+    console.log(`[CDP] Uruchamianie przeglądarki (${browserPath})...`);
+    console.log(`[CDP] Kolejka sprawdzanych domen:`, candidateUrls);
+
     const args = [
         '--remote-debugging-port=9333',
         '--remote-allow-origins=*',
         `--user-data-dir=${profileDir}`,
         '--disable-blink-features=AutomationControlled',
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        '--window-size=1920,1080',
+        '--lang=pl-PL,pl',
         '--no-first-run',
         '--no-default-browser-check',
         'about:blank'
     ];
 
     if (process.platform === 'linux') {
-        args.push('--headless=new', '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu');
+        args.push(
+            '--headless=new',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
+        );
     }
 
-    const edgeProc = spawn(browserPath, args);
+    const browserProc = spawn(browserPath, args);
 
     for (let i = 0; i < 20; i++) {
         await sleep(500);
@@ -172,53 +165,79 @@ async function fetchStrumykData(targetUrl) {
         } catch (e) {}
     });
 
+    // Pełny stealth fingerprinting
     await sendCDP(ws, 'Page.addScriptToEvaluateOnNewDocument', {
         source: `
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            window.chrome = { runtime: {} };
+            Object.defineProperty(navigator, 'languages', { get: () => ['pl-PL', 'pl', 'en-US', 'en'] });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
             window.open = () => null;
         `
     }, msgId++);
 
-    console.log(`[CDP] Ładowanie ${targetUrl}...`);
-    await sendCDP(ws, 'Page.navigate', { url: targetUrl }, msgId++);
-
     let extractedEvents = null;
-    console.log('[CDP] Oczekiwanie na przejście zabezpieczeń i pobranie danych...');
-    for (let i = 0; i < 30; i++) {
-        await sleep(1000);
-        try {
-            const evalRes = await sendCDP(ws, 'Runtime.evaluate', {
-                expression: `(() => {
-                    const list = (typeof eventsData !== 'undefined' ? eventsData : [])
-                        .concat(typeof popularEvents !== 'undefined' ? popularEvents : []);
-                    if (list.length > 0) {
-                        return list.map(e => ({
-                            id: e.id,
-                            category: e.category,
-                            startTime: e.startTime,
-                            title: e.title?.pl ? (e.title.pl.home + ' – ' + e.title.pl.away) : (typeof e.title === 'string' ? e.title : '')
-                        }));
-                    }
-                    return null;
-                })()`,
-                returnByValue: true
-            }, msgId++);
+    let winningDomain = null;
 
-            const val = evalRes?.result?.value;
-            if (val && Array.isArray(val) && val.length > 0) {
-                console.log(`[CDP] Pomyślnie wyekstrahowano ${val.length} wydarzeń z pamięci podręcznej strony!`);
-                extractedEvents = val;
-                break;
-            }
-        } catch (e) {}
+    // Próbuj każdą domenę po kolei, jeśli poprzednia nie odpowiada danymi
+    for (const domain of candidateUrls) {
+        console.log(`[CDP] Próba załadowania domeny: ${domain}...`);
+        try {
+            await sendCDP(ws, 'Page.navigate', { url: domain }, msgId++);
+        } catch (e) {
+            console.log(`[CDP] Błąd nawigacji do ${domain}:`, e.message);
+            continue;
+        }
+
+        // Czekaj do 15 sekund na załadowanie danych z tej domeny
+        for (let s = 0; s < 15; s++) {
+            await sleep(1000);
+            try {
+                const evalRes = await sendCDP(ws, 'Runtime.evaluate', {
+                    expression: `(() => {
+                        const list = (typeof eventsData !== 'undefined' ? eventsData : [])
+                            .concat(typeof popularEvents !== 'undefined' ? popularEvents : []);
+                        if (list.length > 0) {
+                            return list.map(e => ({
+                                id: e.id,
+                                category: e.category,
+                                startTime: e.startTime,
+                                title: e.title?.pl ? (e.title.pl.home + ' – ' + e.title.pl.away) : (typeof e.title === 'string' ? e.title : '')
+                            }));
+                        }
+                        return null;
+                    })()`,
+                    returnByValue: true
+                }, msgId++);
+
+                const val = evalRes?.result?.value;
+                if (val && Array.isArray(val) && val.length > 0) {
+                    console.log(`[CDP] Sukces! Wyekstrahowano ${val.length} wydarzeń z domeny: ${domain}`);
+                    extractedEvents = val;
+                    winningDomain = domain;
+                    break;
+                }
+            } catch (e) {}
+        }
+
+        if (extractedEvents && extractedEvents.length > 0) {
+            break; // Mamy dane, nie trzeba sprawdzać kolejnych domen
+        } else {
+            console.log(`[CDP] Domena ${domain} nie zwróciła listy meczów (możliwa blokada). Przechodzę do kolejnej...`);
+        }
     }
 
     ws.close();
-    edgeProc.kill();
+    browserProc.kill();
+
+    if (winningDomain) {
+        saveConfig({ current_domain: winningDomain });
+    }
+
     return extractedEvents;
 }
 
-// 3. Reguły Filtrowania Użytkownika & Podział na Dni (Dzisiaj / Jutro / Pojutrze)
+// 3. Reguły Filtrowania Użytkownika & Podział na Dni
 function processEvents(rawEvents) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -231,7 +250,6 @@ function processEvents(rawEvents) {
         pojutrze: []
     };
 
-    // Sporty całkowicie wyeliminowane
     const excludedCategories = [
         'americanfootball',
         'baseball',
@@ -240,7 +258,6 @@ function processEvents(rawEvents) {
         'koszykowka'
     ];
 
-    // Słowa kluczowe niższych poziomów rozgrywkowych (eliminacja 2. i 3. lig, zapleczy, challengerów)
     const lowerTierKeywords = [
         '2. liga', '3. liga', 'u23', 'u19', 'challenger',
         'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2',
@@ -253,7 +270,7 @@ function processEvents(rawEvents) {
         const cat = (ev.category || '').toLowerCase();
         const titleLower = ev.title.toLowerCase();
 
-        // 1. Eliminacja niechcianych sportów
+        // 1. Eliminacja niechcianych dyscyplin
         if (excludedCategories.includes(cat)) continue;
         if (titleLower.includes('wnba') || titleLower.includes('nfl') || titleLower.includes('mlb')) continue;
 
@@ -308,7 +325,7 @@ function processEvents(rawEvents) {
 module.exports = {
     loadConfig,
     saveConfig,
-    discoverWorkingDomain,
+    getCandidateDomains,
     fetchStrumykData,
     processEvents
 };

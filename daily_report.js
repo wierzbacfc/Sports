@@ -46,26 +46,16 @@ async function run() {
         process.exit(1);
     }
 
-    // 1. Sprawdzenie i auto-discovery domeny Strumyka
+    // 1. Wybór domeny początkowej
     let cfg = loadConfig();
-    let activeDomain = cfg.current_domain;
+    let activeDomain = cfg.current_domain || 'https://strumyk.ca';
 
-    try {
-        const testRes = await fetch(activeDomain, { method: 'HEAD' });
-        if (testRes.status !== 200 && testRes.status !== 403) throw new Error();
-    } catch (e) {
-        console.log(`Domena ${activeDomain} jest niedostępna. Rozpoczynam wykrywanie nowej domeny...`);
-        activeDomain = await discoverWorkingDomain();
-        cfg.current_domain = activeDomain;
-        saveConfig(cfg);
-    }
+    console.log(`Domyślna domena Strumyka: ${activeDomain}`);
 
-    console.log(`Aktywna domena Strumyka: ${activeDomain}`);
-
-    // 2. Pobranie danych ze Strumyka (CDP Stealth)
+    // 2. Pobranie danych ze Strumyka (CDP Stealth z rotacją domen)
     const rawEvents = await fetchStrumykData(activeDomain);
     if (!rawEvents || rawEvents.length === 0) {
-        console.error('❌ Błąd: Nie udało się pobrać listy wydarzeń.');
+        console.error('❌ Błąd: Nie udało się pobrać listy wydarzeń z żadnej z dostępnych domen.');
         process.exit(1);
     }
 
