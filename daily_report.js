@@ -11,32 +11,36 @@ async function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Podział długiej wiadomości na części (limit WhatsApp/CallMeBot: ~2000 znaków)
-function splitMessage(text, maxChunk = 900) {
-    // Podział po głównych sekcjach dni, aby nie obcinać tekstu
-    const sections = text.split(/(?=\*───)/g);
-    const chunks = [];
-    let current = '';
+// Podział wiadomości per dzień (DZIŚ, JUTRO, POJUTRZE) z limitem URL CallMeBot
+function splitMessage(text) {
+    // Podział po dniach: DZIŚ, JUTRO, POJUTRZE
+    const dayRegex = /(?=\*───\s*(?:DZIŚ|DZISIAJ|JUTRO|POJUTRZE))/gi;
+    let parts = text.split(dayRegex).map(p => p.trim()).filter(Boolean);
 
-    for (const sec of sections) {
-        if ((current + sec).length > maxChunk && current.trim()) {
-            chunks.push(current.trim());
-            current = '';
-        }
-        if (sec.length > maxChunk) {
-            const lines = sec.split('\n');
-            for (const line of lines) {
-                if ((current + line).length > maxChunk && current.trim()) {
-                    chunks.push(current.trim());
-                    current = '';
+    // Jeśli pierwsza część to sam nagłówek (np. 🏆 *SPORTOWY ROZKŁAD JAZDY*), dołącz go do pierwszego dnia
+    if (parts.length > 1 && !parts[0].includes('*───')) {
+        parts[1] = parts[0] + '\n\n' + parts[1];
+        parts.shift();
+    }
+
+    const chunks = [];
+    for (const part of parts) {
+        // Bezpieczny limit URL dla CallMeBot (max 1100 zakodowanych znaków)
+        if (encodeURIComponent(part).length > 1100) {
+            const leagues = part.split(/\n(?=[⚽🏎️🏁🎾🏐🤾📺])/g).map(l => l.trim()).filter(Boolean);
+            let sub = '';
+            for (const l of leagues) {
+                if (encodeURIComponent(sub + '\n\n' + l).length > 1100 && sub) {
+                    chunks.push(sub.trim());
+                    sub = '';
                 }
-                current += line + '\n';
+                sub = (sub ? sub + '\n\n' : '') + l;
             }
+            if (sub.trim()) chunks.push(sub.trim());
         } else {
-            current += sec;
+            chunks.push(part);
         }
     }
-    if (current.trim()) chunks.push(current.trim());
     return chunks;
 }
 
