@@ -1,6 +1,7 @@
 // ai_agents.js - 2-Agent Sports Pipeline (Gemini)
 
 const MODELS = [
+    'gemini-3.8-flash',
     'gemini-2.5-pro',
     'gemini-2.5-flash',
     'gemini-2.0-flash',
