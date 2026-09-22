@@ -105,7 +105,7 @@ function getBrowserExecutable() {
         return 'msedge.exe';
     } else {
         // Linux (GitHub Actions runner)
-        return process.env.CHROME_BIN || 'google-chrome-stable' || 'google-chrome' || 'chromium-browser';
+        return process.env.CHROME_BIN || '/usr/bin/google-chrome' || 'google-chrome' || 'google-chrome-stable';
     }
 }
 
