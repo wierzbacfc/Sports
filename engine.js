@@ -240,9 +240,12 @@ async function fetchStrumykData(preferredDomain) {
 // 3. Reguły Filtrowania Użytkownika & Podział na Dni
 function processEvents(rawEvents) {
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-    const dayAfter = new Date(today); dayAfter.setDate(today.getDate() + 2);
+    // Wszystkie daty i godziny obliczamy bezwzględnie w strefie czasowej Polski (Europe/Warsaw)
+    const todayStr = now.toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
+    const tomorrowDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowStr = tomorrowDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
+    const dayAfterDate = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+    const dayAfterStr = dayAfterDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
 
     const schedule = {
         dzisiaj: [],
@@ -290,7 +293,8 @@ function processEvents(rawEvents) {
         'challenger', 'itf',
         'metalkas 2 ekstraliga', '2. bundesliga', 'la liga 2', 'serie b',
         'revelação', 'dmpj', 'cro race',
-        'celtic b', 'hearts b', 'rezerwy', 'ii ', ' 2', ' b ',
+        'celtic b', 'hearts b', 'rezerwy', ' ii ', ' 2 -', ' 2 –', ' b -', ' b –',
+        'tigre 2', 'defensa y justicia 2',
         'dumbravita', 'resita', 'mures', 'bucuresti', 'kladno', 'banik', 'birmingham – brooklyn'
     ];
 
@@ -310,35 +314,43 @@ function processEvents(rawEvents) {
             continue;
         }
 
-        // 2. Eliminacja rezerw i lig młodzieżowych/niższych
-        if (lowerTierKeywords.some(kw => titleLower.includes(kw))) continue;
+        // 2. Eliminacja rezerw i lig młodzieżowych/niższych (F1 i Motorsport nie podlegają eliminacji rezerw!)
+        const isMotorsportOrF1 = cat === 'formula1' || cat === 'motorsport' || titleLower.includes('formula 1') || titleLower.includes('f1');
+        if (!isMotorsportOrF1 && lowerTierKeywords.some(kw => titleLower.includes(kw))) {
+            continue;
+        }
 
         // 3. Kategoryzacja wydarzenia do sportu / ligi (tylko TOP TIER)
         const displayCategory = categorizeEvent(ev.title, ev.category);
         if (!displayCategory) continue; // jeśli nie pasuje do żadnej elitarnej ligi/kategorii, odrzucamy!
 
-        // Przypisanie do dnia
+        // Przypisanie do dnia w strefie Europe/Warsaw
         const evDate = new Date(ev.startTime * 1000);
-        const evDay = new Date(evDate.getFullYear(), evDate.getMonth(), evDate.getDate());
+        const evDateStr = evDate.toLocaleDateString('en-CA', { timeZone: 'Europe/Warsaw' });
 
         let targetBucket = null;
-        if (evDay.getTime() === today.getTime()) {
+        if (evDateStr === todayStr) {
             targetBucket = schedule.dzisiaj;
-        } else if (evDay.getTime() === tomorrow.getTime()) {
+        } else if (evDateStr === tomorrowStr) {
             targetBucket = schedule.jutro;
-        } else if (evDay.getTime() === dayAfter.getTime()) {
+        } else if (evDateStr === dayAfterStr) {
             targetBucket = schedule.pojutrze;
         }
 
         if (targetBucket) {
-            const timeStr = evDate.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+            const timeStr = evDate.toLocaleTimeString('pl-PL', {
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Europe/Warsaw'
+            });
+
             if (!targetBucket.some(e => e.title === ev.title && e.time === timeStr)) {
                 let sportName = 'Piłka nożna';
                 if (cat === 'siatkowka' || titleLower.includes('siatkówka') || titleLower.includes('siatkowka')) {
                     sportName = 'Siatkówka';
                 } else if (cat === 'tenis') {
                     sportName = 'Tenis';
-                } else if (cat === 'motorsport' || cat === 'f1' || titleLower.includes('formula 1') || titleLower.includes('f1')) {
+                } else if (cat === 'motorsport' || cat === 'formula1' || cat === 'f1' || titleLower.includes('formula 1') || titleLower.includes('f1')) {
                     sportName = 'Formuła 1';
                 } else if (cat === 'zuzel' || titleLower.includes('ekstraliga')) {
                     sportName = 'Żużel';
@@ -383,7 +395,10 @@ function categorizeEvent(title, rawCategory) {
         return '📺 *Magazyny Sportowe:*';
     }
 
-    // 2. Motorsport (Formuła 1 / MotoGP)
+    // 2. Motorsport (Formuła 1 / MotoGP - WYŁĄCZNIE NAJWYŻSZA KLASA, bez F2/F3/Moto2/Moto3)
+    if (t.includes('formula 2') || t.includes('formula 3') || t.includes('f2:') || t.includes('f3:') || t.includes('moto2') || t.includes('moto3')) {
+        return null;
+    }
     if (c === 'motorsport' || c === 'f1' || c === 'formula1' || c === 'motogp' ||
         t.includes('formuła 1') || t.includes('formula 1') || t.includes('f1') ||
         t.includes('grand prix') || t.includes('motogp')) {

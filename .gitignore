@@ -1,6 +1,8 @@
 node_modules/
 .edge_profile/
 .chrome_profile/
+.browser_profile/
+config.json
 dump.html
 err.txt
 strumyk_page.html

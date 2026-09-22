@@ -76,20 +76,21 @@ KRYTYCZNE ZASADY DYSCYPLIN:
 1. SIATKÓWKA TO NIE PIŁKA NOŻNA!
    - Każdy mecz siatkówki (np. Polska – Niemcy) MUSI być w sekcji SIATKÓWKA (sport: 'Siatkówka')!
    - BEZWZGLĘDNY ZAKAZ umieszczania meczów siatkówki w piłce nożnej!
-2. UZUPEŁNIENIE PEŁNEGO HARMONOGRAMU WEEKENDU F1:
-   - Jeśli w danych pojawia się sesja Formuły 1 (np. trening w piątek), to oznacza, że w ten weekend odbywa się Grand Prix F1!
-   - W takim wypadku uzupełnij PEŁNY HARMONOGRAM CAŁEGO WEEKENDU F1 dla danego GP (Piątek, Sobota, Niedziela: wszystkie treningi, kwalifikacje i wyścig główny) z dokładnymi, rzeczywistymi godzinami czasu polskiego (CET/CEST).
+2. UZUPEŁNIENIE PEŁNEGO HARMONOGRAMU WEEKENDU F1 (CZAS POLSKI - EUROPE/WARSAW):
+   - Jeśli w danych pojawia się sesja Formuły 1, to oznacza weekend Grand Prix F1!
+   - Używaj DOKŁADNYCH godzin podanych w danych ze Strumyka (są już przeliczone na czas polski Europe/Warsaw, np. 10:25 1. sesja treningowa, 13:55 2. sesja treningowa).
+   - Uzupełnij pełny terminarz tego Grand Prix na cały weekend z godzinami w czasie polskim (dla GP Azerbejdżanu w Baku wyścig główny odbywa się w sobotę o 13:00 czasu polskiego!).
    - HARMONOGRAM F1 MUSI BYĆ CZYSTY, SUROWY I KONKRETNY:
-     🏎️ *Formuła 1 – GP [Pełna nazwa Grand Prix]:*
+     🏎️ *Formuła 1 – GP Azerbejdżanu (Baku):*
+     *Czwartek (Pojutrze):*
+     • *10:25* 1. sesja treningowa
+     • *13:55* 2. sesja treningowa
      *Piątek:*
-     • *GG:MM* 1. sesja treningowa
-     • *GG:MM* 2. sesja treningowa
+     • *10:25* 3. sesja treningowa
+     • *13:55* Kwalifikacje
      *Sobota:*
-     • *GG:MM* 3. sesja treningowa
-     • *GG:MM* Kwalifikacje
-     *Niedziela:*
-     • *GG:MM* Wyścig główny
-   - CAŁKOWITY ZAKAZ wymyślania fikcyjnych nazw GP, żartów czy komentarzy o kawie i strategiach! Czyste, rzeczywiste sesje i godziny.
+     • *13:00* Wyścig główny
+   - CAŁKOWITY ZAKAZ wymyślania żartów, fikcyjnych opisów o kawie i oponach. Czysty terminarz!
 3. CZYSTE DANE:
    - Zakaz jakichkolwiek opisów, komentarzy czy żartów. Wyłącznie godziny i nazwy rywali/sesji.
 

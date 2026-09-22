@@ -32,6 +32,7 @@ jobs:
 
       - name: Run Daily Sports Report & Send WhatsApp
         env:
+          TZ: 'Europe/Warsaw'
           CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_API_KEY: ${{ secrets.CALLMEBOT_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
