@@ -1,5 +1,6 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const CONFIG_FILE = path.join(__dirname, 'config.json');
@@ -89,11 +90,11 @@ function getBrowserExecutable() {
 
 async function fetchStrumykData(preferredDomain) {
     const browserPath = getBrowserExecutable();
-    const profileDir = path.join(__dirname, '.browser_profile');
+    const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chrome_cdp_'));
 
-    // Build candidates list: preferred first, then all others
+    // Filtrujemy puste wartości i duplikaty
     const allCandidates = await getCandidateDomains();
-    const candidateUrls = [preferredDomain, ...allCandidates.filter(d => d !== preferredDomain)];
+    const candidateUrls = Array.from(new Set([preferredDomain, ...allCandidates].filter(Boolean)));
 
     console.log(`[CDP] Uruchamianie przeglądarki (${browserPath})...`);
     console.log(`[CDP] Kolejka sprawdzanych domen:`, candidateUrls);
@@ -108,7 +109,9 @@ async function fetchStrumykData(preferredDomain) {
         '--lang=pl-PL,pl',
         '--no-first-run',
         '--no-default-browser-check',
-        'about:blank'
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-sync'
     ];
 
     if (process.platform === 'linux') {
@@ -121,114 +124,145 @@ async function fetchStrumykData(preferredDomain) {
         );
     }
 
+    // Adres docelowy musi być ZAWSZE na samym końcu argumentów
+    args.push('about:blank');
+
     const browserProc = spawn(browserPath, args);
 
-    for (let i = 0; i < 20; i++) {
+    let stderrOutput = '';
+    browserProc.stderr?.on('data', d => {
+        stderrOutput += d.toString();
+    });
+
+    let connected = false;
+    for (let i = 0; i < 30; i++) {
         await sleep(500);
+        if (browserProc.exitCode !== null) {
+            try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch (e) {}
+            throw new Error(`Przeglądarka niespodziewanie zakończyła działanie z kodem ${browserProc.exitCode}. Stderr: ${stderrOutput}`);
+        }
         try {
             const res = await fetch('http://127.0.0.1:9333/json/version');
-            if (res.ok) break;
+            if (res.ok) {
+                connected = true;
+                break;
+            }
         } catch (e) {}
+    }
+
+    if (!connected) {
+        try { browserProc.kill(); } catch (e) {}
+        try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch (e) {}
+        throw new Error(`Nie udało się połączyć z portem CDP 9333 po 15 sekundach. Stderr: ${stderrOutput}`);
     }
 
     const listRes = await fetch('http://127.0.0.1:9333/json/list');
     const targets = await listRes.json();
     const pageTarget = targets.find(t => t.type === 'page');
 
+    if (!pageTarget || !pageTarget.webSocketDebuggerUrl) {
+        try { browserProc.kill(); } catch (e) {}
+        try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); } catch (e) {}
+        throw new Error('Brak aktywnego page targetu w przeglądarce.');
+    }
+
     const ws = new WebSocket(pageTarget.webSocketDebuggerUrl);
     await new Promise(resolve => ws.addEventListener('open', resolve));
-
-    let msgId = 1;
-    await sendCDP(ws, 'Page.enable', {}, msgId++);
-    await sendCDP(ws, 'Runtime.enable', {}, msgId++);
-    await sendCDP(ws, 'Fetch.enable', { patterns: [{ urlPattern: '*' }] }, msgId++);
-
-    // Blokada przekierowań reklamowych
-    ws.addEventListener('message', async (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            if (data.method === 'Fetch.requestPaused') {
-                const { requestId, request } = data.params;
-                const url = request.url;
-                const isAllowed = url.includes('strumyk') || 
-                                  url.includes('cloudflare.com') || 
-                                  url.includes('challenges.cloudflare.com') ||
-                                  url.startsWith('data:') ||
-                                  url.startsWith('blob:');
-
-                if (isAllowed) {
-                    ws.send(JSON.stringify({ id: msgId++, method: 'Fetch.continueRequest', params: { requestId } }));
-                } else {
-                    ws.send(JSON.stringify({ id: msgId++, method: 'Fetch.failRequest', params: { requestId, errorReason: 'Aborted' } }));
-                }
-            }
-        } catch (e) {}
-    });
-
-    // Pełny stealth fingerprinting
-    await sendCDP(ws, 'Page.addScriptToEvaluateOnNewDocument', {
-        source: `
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            window.chrome = { runtime: {} };
-            Object.defineProperty(navigator, 'languages', { get: () => ['pl-PL', 'pl', 'en-US', 'en'] });
-            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-            window.open = () => null;
-        `
-    }, msgId++);
 
     let extractedEvents = null;
     let winningDomain = null;
 
-    // Próbuj każdą domenę po kolei, jeśli poprzednia nie odpowiada danymi
-    for (const domain of candidateUrls) {
-        console.log(`[CDP] Próba załadowania domeny: ${domain}...`);
-        try {
-            await sendCDP(ws, 'Page.navigate', { url: domain }, msgId++);
-        } catch (e) {
-            console.log(`[CDP] Błąd nawigacji do ${domain}:`, e.message);
-            continue;
-        }
+    try {
+        let msgId = 1;
+        await sendCDP(ws, 'Page.enable', {}, msgId++);
+        await sendCDP(ws, 'Runtime.enable', {}, msgId++);
+        await sendCDP(ws, 'Fetch.enable', { patterns: [{ urlPattern: '*' }] }, msgId++);
 
-        // Czekaj do 15 sekund na załadowanie danych z tej domeny
-        for (let s = 0; s < 15; s++) {
-            await sleep(1000);
+        // Blokada przekierowań reklamowych
+        ws.addEventListener('message', async (event) => {
             try {
-                const evalRes = await sendCDP(ws, 'Runtime.evaluate', {
-                    expression: `(() => {
-                        const list = (typeof eventsData !== 'undefined' ? eventsData : [])
-                            .concat(typeof popularEvents !== 'undefined' ? popularEvents : []);
-                        if (list.length > 0) {
-                            return list.map(e => ({
-                                id: e.id,
-                                category: e.category,
-                                startTime: e.startTime,
-                                title: e.title?.pl ? (e.title.pl.home + ' – ' + e.title.pl.away) : (typeof e.title === 'string' ? e.title : '')
-                            }));
-                        }
-                        return null;
-                    })()`,
-                    returnByValue: true
-                }, msgId++);
+                const data = JSON.parse(event.data);
+                if (data.method === 'Fetch.requestPaused') {
+                    const { requestId, request } = data.params;
+                    const url = request.url;
+                    const isAllowed = url.includes('strumyk') || 
+                                      url.includes('cloudflare.com') || 
+                                      url.includes('challenges.cloudflare.com') ||
+                                      url.startsWith('data:') ||
+                                      url.startsWith('blob:');
 
-                const val = evalRes?.result?.value;
-                if (val && Array.isArray(val) && val.length > 0) {
-                    console.log(`[CDP] Sukces! Wyekstrahowano ${val.length} wydarzeń z domeny: ${domain}`);
-                    extractedEvents = val;
-                    winningDomain = domain;
-                    break;
+                    if (isAllowed) {
+                        ws.send(JSON.stringify({ id: msgId++, method: 'Fetch.continueRequest', params: { requestId } }));
+                    } else {
+                        ws.send(JSON.stringify({ id: msgId++, method: 'Fetch.failRequest', params: { requestId, errorReason: 'Aborted' } }));
+                    }
                 }
             } catch (e) {}
-        }
+        });
 
-        if (extractedEvents && extractedEvents.length > 0) {
-            break; // Mamy dane, nie trzeba sprawdzać kolejnych domen
-        } else {
-            console.log(`[CDP] Domena ${domain} nie zwróciła listy meczów (możliwa blokada). Przechodzę do kolejnej...`);
+        // Pełny stealth fingerprinting
+        await sendCDP(ws, 'Page.addScriptToEvaluateOnNewDocument', {
+            source: `
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+                window.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'languages', { get: () => ['pl-PL', 'pl', 'en-US', 'en'] });
+                Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+                window.open = () => null;
+            `
+        }, msgId++);
+
+        // Próbuj każdą domenę po kolei, jeśli poprzednia nie odpowiada danymi
+        for (const domain of candidateUrls) {
+            console.log(`[CDP] Próba załadowania domeny: ${domain}...`);
+            try {
+                await sendCDP(ws, 'Page.navigate', { url: domain }, msgId++);
+            } catch (e) {
+                console.log(`[CDP] Błąd nawigacji do ${domain}:`, e.message);
+                continue;
+            }
+
+            // Czekaj do 15 sekund na załadowanie danych z tej domeny
+            for (let s = 0; s < 15; s++) {
+                await sleep(1000);
+                try {
+                    const evalRes = await sendCDP(ws, 'Runtime.evaluate', {
+                        expression: `(() => {
+                            const list = (typeof eventsData !== 'undefined' ? eventsData : [])
+                                .concat(typeof popularEvents !== 'undefined' ? popularEvents : []);
+                            if (list.length > 0) {
+                                return list.map(e => ({
+                                    id: e.id,
+                                    category: e.category,
+                                    startTime: e.startTime,
+                                    title: e.title?.pl ? (e.title.pl.home + ' – ' + e.title.pl.away) : (typeof e.title === 'string' ? e.title : '')
+                                }));
+                            }
+                            return null;
+                        })()`,
+                        returnByValue: true
+                    }, msgId++);
+
+                    const val = evalRes?.result?.value;
+                    if (val && Array.isArray(val) && val.length > 0) {
+                        console.log(`[CDP] Sukces! Wyekstrahowano ${val.length} wydarzeń z domeny: ${domain}`);
+                        extractedEvents = val;
+                        winningDomain = domain;
+                        break;
+                    }
+                } catch (e) {}
+            }
+
+            if (extractedEvents && extractedEvents.length > 0) {
+                break; // Mamy dane, nie trzeba sprawdzać kolejnych domen
+            } else {
+                console.log(`[CDP] Domena ${domain} nie zwróciła listy meczów (możliwa blokada). Przechodzę do kolejnej...`);
+            }
         }
+    } finally {
+        try { ws.close(); } catch (e) {}
+        try { browserProc.kill(); } catch (e) {}
+        try { fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) {}
     }
-
-    ws.close();
-    browserProc.kill();
 
     if (winningDomain) {
         saveConfig({ current_domain: winningDomain });
